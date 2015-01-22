@@ -44,19 +44,19 @@ unshift k x = k (shift x)
 
 A pipe can be accessed through both ends, explicitly.
 
- Sink >------ Pipe ----> Source
+ Producer --> Sink >------ Pipe ----> Source --> Consumer
 
 Data is sent to a sink, and can be read from a source. The naming
 convention may seem counterintuitive, but it makes sense from the
-point of view of the program using those objects.
+point of view of the Producer/Consumer programs using those objects.
 
 
 Attention! For this to make sense, sinks and sources must be used linearly.
 
-1. They may not be duplicated (or shared!) That is, they may not be re-used after (after
+1. They MUST NOT be duplicated (or shared!) That is, they may not be re-used after (after
 calling one of the primitive functions.)
 
-2. They must be consumed, or passed to a function consuming them
+2. They MUST be consumed (or passed to a function consuming them)
 
 -}
 
@@ -141,8 +141,8 @@ linesP xs src snk = do
 lines' = linesP []
 
 main = do
-  h <- openFile "Organ.hs" ReadMode
-  open (\chars -> readF h chars)
+  open (\chars -> do h <- openFile "Organ.hs" ReadMode
+                     readF h chars)
        (\chars -> open (\lines -> lines' chars lines)
                        (\lines -> display lines))
 
@@ -178,6 +178,7 @@ codisplay :: CoSource String -> Eff
 codisplay Full = return ()
 codisplay (Cont c) = c (Cons putStrLn codisplay)
 
+-- | Additive conjuction
 type a & b = N (Either (N a) (N b))
 
 mux :: CoSource a -> CoSource b -> CoSink (a & b) -> Eff
@@ -196,9 +197,9 @@ csmap f (Cont k) g = g (Cont $ \s -> smap f s k)
 -- Conversions between sources and sinks.
 -----------------------------------------
 
--- It is in general harder to deal with a source than to deal with a
--- sink. Conversion from source to sink is easy; conversion from sink
--- to source is hard (and lossy).
+-- It is in general easier to deal with a source argument than to deal
+-- with a sink argument. Conversion from source to sink is easy;
+-- conversion from sink to source is hard (and lossy).
 
 -- | Conversion from source to sink by doing sequential processing.
 sourceToSink :: Source a -> Sink (N a)
