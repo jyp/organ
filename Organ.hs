@@ -65,11 +65,11 @@ calling one of the primitive functions.)
 -- source may be able to provide only a certain number of @a@'s
 -- 2. Close the source (notify that we will not demand any @a@ any
 -- longer).
-data Source a = Nil | Cons a (Sink a -> Eff)
+data Source a = Nil | Cons a (N (Sink a))
 
 -- | A sink of @a@'s. Given a sink, one can: 1. Send a number of
 -- @a@'s. 2. Close the sink
-data Sink a = Full | Cont (Source a -> Eff)
+data Sink a = Full | Cont (N (Source a))
 
 -- | Open a pipe (connect two sides together)
 open :: (Sink a -> Eff) -> (Source a -> Eff) -> Eff
@@ -141,7 +141,7 @@ linesP xs src snk = do
 lines' = linesP []
 
 main = do
-  h <- openFile "CS2.hs" ReadMode
+  h <- openFile "Organ.hs" ReadMode
   open (\chars -> readF h chars)
        (\chars -> open (\lines -> lines' chars lines)
                        (\lines -> display lines))
