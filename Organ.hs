@@ -213,9 +213,10 @@ zipSources (Cons x xs) (Cons x' xs') = do
   x' x
   xs (Cont $ \sa -> xs' $ Cont $ \sna -> zipSources sa sna)
 
--- | Convert a sink to a source (by buffering). Attention: the closing
--- operation on the resulting source will not be propagated to the
--- input sink.
+-- | Convert a sink to a source. This is done by buffering, so the
+-- producer/consumer no longer work in lockstep. Attention: the
+-- closing operation on the resulting source will not be propagated to
+-- the input sink.
 sinkToSource :: Sink a -> NN (Source (N a))
 sinkToSource (Cont f) g = alloc g f
 sinkToSource Full _ = return ()
@@ -235,5 +236,4 @@ alloc f g = do
   f $ fromList $ repeat $ \x -> modifyIORef a (x:)
   x <- readIORef a
   g $ fromList $ reverse x
-
 
