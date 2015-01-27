@@ -3,6 +3,7 @@ module Organ where
 
 import System.IO
 import Data.IORef
+import qualified Control.Concurrent as C
 
 -- | The Effect type. (The core library should be parametric over this
 -- type. However, IO being a common use case, we'll stick to that)
@@ -236,4 +237,11 @@ alloc f g = do
   f $ fromList $ repeat $ \x -> modifyIORef a (x:)
   x <- readIORef a
   g $ fromList $ reverse x
+
+buffer :: (Source (N a) -> Eff) -> (Source a -> Eff) -> Eff
+buffer f g = do
+  c <- C.newChan
+  x <- C.getChanContents c
+  C.forkIO $ f $ fromList $ repeat $ C.writeChan c
+  g $ fromList $ x
 
