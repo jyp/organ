@@ -211,6 +211,7 @@ zipSources :: Source a -> Source (N a) -> Eff
 zipSources Nil _ = return ()
 zipSources _ Nil = return ()
 zipSources (Cons x xs) (Cons x' xs') = do
+  -- C.forkIO $ x' x parallel zipping
   x' x
   xs (Cont $ \sa -> xs' $ Cont $ \sna -> zipSources sa sna)
 
@@ -219,7 +220,7 @@ zipSources (Cons x xs) (Cons x' xs') = do
 -- closing operation on the resulting source will not be propagated to
 -- the input sink.
 sinkToSource :: Sink a -> NN (Source (N a))
-sinkToSource (Cont f) g = alloc g f
+sinkToSource (Cont f) g = buffer g f
 sinkToSource Full _ = return ()
 
 sinkToSource' :: Sink (N a) -> NN (Source a)
