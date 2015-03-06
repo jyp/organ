@@ -296,21 +296,8 @@ unit a = cons a empty
 
 bindSrc :: Src a -> (a -> Src b) -> Src b
 bindSrc s f = concatSrc (mapSrc f s)
-{-
+{- Src is a type alias so we cannot make a Monad instance.
 instance Monad Src where
   return = unit
   (>>=) = bindSrc
 -}
-
-
-type Parser s a = Source s -> NN a
-
-runParser :: Parser s a -> Source s -> NN a
-runParser p s = p s
-
-bindP :: Parser s a -> (a -> Parser s b) -> Parser s b
-bindP p f Nil = p Nil `bindNN` \a -> f a Nil
-bindP p f (Cons c s) = p (Cons c s) `bindNN` \a -> f a undefined
-
-bindNN :: NN a -> (a -> NN b) -> NN b
-bindNN f m = \k -> f (\a -> m a k)
