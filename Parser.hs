@@ -217,7 +217,7 @@ longestResult p0 = scan p0 Nothing
   scan (Look f)       mres       xs     = scan (f $ listToMaybe xs) mres xs
 
 
-longestResultIO :: P Char a -> N (ParseResult Char a) -> N (Source Char)
+longestResultIO :: P s a -> N (ParseResult s a) -> N (Source s)
 longestResultIO p0 ret src = scan p0 Nothing src
  where
   scan (Skip n p)     mres       xs     = dropSrc n xs $ scan p mres
