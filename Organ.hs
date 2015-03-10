@@ -226,8 +226,8 @@ sourceToSink s = Cont $ \s' -> zipSources s s'
 
 -- | Loop through two sources and make them communicate
 zipSources :: Source a -> Source (N a) -> Eff
-zipSources Nil _ = return ()
-zipSources _ Nil = return ()
+zipSources Nil (Cons _ xs) = xs Full
+zipSources (Cons _ xs) Nil = xs Full
 zipSources (Cons x xs) (Cons x' xs') = do
   -- C.forkIO $ x' x parallel zipping
   x' x
