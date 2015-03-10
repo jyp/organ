@@ -82,22 +82,32 @@ data Source a = Nil | Cons a (N (Sink a))
 data Sink a = Full | Cont (N (Source a))
 
 
--- Source and Sink are true duals:
-
--- | Open a pipe (connect two sides together) (duality 1 (cut))
+-- | Open a pipe (connect two sides together) (cut)
 open :: (Sink a -> Eff) -> (Source a -> Eff) -> Eff
 open producer consumer = producer $ Cont consumer
 
--- | Forwarding (duality 2 (ax))
+-- | Forwarding (ax)
 fwd :: Source a -> Sink a -> Eff
+fwd s (Cont s') = s' s
 fwd Nil Full = return ()
 fwd (Cons _ xs) Full = xs Full
-fwd s (Cont s') = s' s
+
+shiftSource :: Source a -> N (Sink a)
+shiftSource = fwd
+
+shiftSink :: Sink a -> N (Source a)
+shiftSink = flip fwd
+
+unshiftSource :: N (Source a) -> Sink a
+unshiftSource = Cont
+
+-- source and sinks are NOT true duals:
+unshiftSink :: N (Sink a) -> Source a
+unshiftSink = error "cannot be implemented!"
 
 -- | Notify a source that we won't accept anything it may send
 close :: Source a -> Eff
-close Nil = return ()
-close (Cons _ k) = k Full
+close x = fwd x Full
 
 -- | Wait for some data on a source
 await :: Source a -> Eff -> (a -> Source a -> Eff) -> Eff
@@ -117,9 +127,7 @@ yield' x (Cont c) _    k = c (Cons x k)
 
 -- | Notify that we won't send any data
 done :: Sink a -> Eff
-done Full = return ()
-done (Cont c) = c Nil
-
+done = fwd Nil
 
 -- Examples
 

@@ -16,11 +16,16 @@ unshiftSnk k1 k2 = k1 $ \x -> fwd k2 x
 unshiftSrc :: N (Snk a) -> Src a
 unshiftSrc k1 k2 = k1 $ \x -> fwd x k2
 
+
+-- Perhaps better name is "forward" (see ax in LL)
 compose :: Src a -> Snk a -> Eff
 compose = open
 
-forward :: Src a -> Snk a -> Eff
-forward = compose
+shiftSource :: Src a -> N (Snk a)
+shiftSource = open
+
+shiftSink :: Snk a -> N (Src a)
+shiftSink = flip open
 
 -- | Discard the source contents; return the length.
 lengthSrc :: Src a -> N Int -> Eff
