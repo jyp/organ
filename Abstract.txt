@@ -1,0 +1,8 @@
+We present an alternative paradigm for IO in Haskell.
+- based on continuations
+- linear type-checking helps programmer ensure program correctness
+
+Application: stream processing
+- API for allocation-free stream processing
+- with escape hatch
+- making parallelism opportunities explicit
