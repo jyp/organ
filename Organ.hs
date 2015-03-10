@@ -250,7 +250,7 @@ sinkToSource (Cont f) g = buffer g f
 sinkToSource Full _ = return ()
 
 sinkToSource' :: Sink (N a) -> NN (Source a)
-sinkToSource' (Cont f) g = alloc f g
+sinkToSource' (Cont f) g = buffer f g
 sinkToSource' Full _ = return ()
 
 fromList :: [a] -> Source a

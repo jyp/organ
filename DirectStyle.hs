@@ -21,11 +21,11 @@ unshiftSrc k1 k2 = k1 $ \x -> fwd x k2
 compose :: Src a -> Snk a -> Eff
 compose = open
 
-shiftSource :: Src a -> N (Snk a)
-shiftSource = open
+shiftSrc :: Src a -> N (Snk a)
+shiftSrc = open
 
-shiftSink :: Snk a -> N (Src a)
-shiftSink = flip open
+shiftSnk :: Snk a -> N (Src a)
+shiftSnk = flip open
 
 -- | Discard the source contents; return the length.
 lengthSrc :: Src a -> N Int -> Eff
@@ -153,30 +153,33 @@ dnsSink Full k = k Full
 dnsSink (Cont s) k = help k s
 
 help :: N (Sink a) -> N (Source (NN a)) -> Eff
-help k1 k2 = open k1 $ \x -> smap (\y k -> k (shift y)) x k2 -- overkill
+help k1 k2 = open k1 $ \x -> smap (shift . shift) x k2 -- overkill
 
 srcToSnk :: Src a -> Snk (N a)
 srcToSnk k1 s2 = dnsSink (sourceToSink s2) k1
--- srcToSnk s Nil = s Full
--- srcToSnk s (Cons a s') = s (Cont (srcToSnkN a s'))
 
--- srcToSnkN :: N a -> Src (N a) -> Snk a
--- srcToSnkN na s Nil = s Full -- ? I'm dropping the na here
--- srcToSnkN na s (Cons a s') = na a >> s (Cont (srcToSnk s'))
+snkToSrc :: Snk a -> Src (N a)
+snkToSrc s s' = sinkToSource' s' s
 
 cons :: a -> Src a -> Src a
-cons a s Full = s Full
-cons a s (Cont s') = s' (Cons a s)
+cons a s s' = yield a s' s
 
-snoc :: N a -> Snk a -> Snk a
-snoc na s Nil = s Nil
-snoc na s (Cons a s') = na a >> s' (Cont s)
+match :: Eff -> (a -> Snk a) -> Snk a
+match nil' cons' k = await k nil' cons'
 
 tail :: Src a -> Src a
 tail s Full = s Full
 tail s (Cont s') = s (Cont (\source -> case source of
   Nil -> s' Nil
   (Cons a s'') -> compose s'' s'))
+
+-- A slightly crazy variant
+tail' :: Src a -> Src a
+tail' s = unshiftSrc $ \k -> -- instead of producing a source, consume a sink (k)
+          shiftSrc s $ -- instead of consuming a source, produce a sink
+          match
+            (return ())
+            (\_ -> k)
 
 writeFileSnk :: FilePath -> Snk Char
 writeFileSnk file s = do
