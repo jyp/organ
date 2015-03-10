@@ -1,6 +1,8 @@
 {-# LANGUAGE TypeOperators #-}
 module Organ where
 
+import Control.Monad (ap)
+import Control.Applicative
 import System.IO
 import Data.IORef
 import qualified Control.Concurrent as C
@@ -25,17 +27,24 @@ type NNNN a = NN (NN a)
 shift :: a -> NN a
 shift x k = k x
 
--- | Collapsing three negations to one
+-- | Collapsing three negations to one.  This means that, in the
+-- presence of effects, it is possible to remove double negations.
 unshift :: NNN a -> N a
 unshift k x = k (shift x)
 -- unshift =  (. shift)
 
 
--- Double negation is a monad; but we won't use that.
--- newtype P a = P {fromP :: NN a}
--- instance Monad P where
---   return = P . shift
---   (P k) >>= f = P $ \b -> k (\a -> fromP (f a) b)
+-- Double negation is a monad; so we can recover our good old IO
+-- monad, as follows. But we won't use it!
+newtype IO' a = IO {fromIO :: NN a}
+instance Functor IO' where
+  fmap f (IO k) = IO $ \x -> k $ x . f
+instance Applicative IO' where
+  (<*>) = ap
+  pure = return
+instance Monad IO' where
+  return = IO . shift
+  (IO k) >>= f = IO $ \b -> k (\a -> fromIO (f a) b)
 
 
 --------------------------
@@ -72,9 +81,18 @@ data Source a = Nil | Cons a (N (Sink a))
 -- @a@'s. 2. Close the sink
 data Sink a = Full | Cont (N (Source a))
 
--- | Open a pipe (connect two sides together)
+
+-- Source and Sink are true duals:
+
+-- | Open a pipe (connect two sides together) (duality 1 (cut))
 open :: (Sink a -> Eff) -> (Source a -> Eff) -> Eff
 open producer consumer = producer $ Cont consumer
+
+-- | Forwarding (duality 2 (ax))
+fwd :: Source a -> Sink a -> Eff
+fwd Nil Full = return ()
+fwd (Cons _ xs) Full = xs Full
+fwd s (Cont s') = s' s
 
 -- | Notify a source that we won't accept anything it may send
 close :: Source a -> Eff

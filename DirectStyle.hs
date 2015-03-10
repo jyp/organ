@@ -3,19 +3,30 @@ module DirectStyle where
 
 import Organ
 import System.IO
-import Data.IORef
 import Control.Concurrent.MVar
 import Control.Concurrent (forkIO)
 
 type Src a = N (Sink a)
 type Snk a = N (Source a)
 
+-- Source and Sink are true duals:
+unshiftSnk :: N (Src a) -> Snk a
+unshiftSnk k1 k2 = k1 $ \x -> fwd k2 x
+
+unshiftSrc :: N (Snk a) -> Src a
+unshiftSrc k1 k2 = k1 $ \x -> fwd x k2
+
 compose :: Src a -> Snk a -> Eff
 compose = open
 
-lengthSrc :: Src a -> NN Int
+forward :: Src a -> Snk a -> Eff
+forward = compose
+
+-- | Discard the source contents; return the length.
+lengthSrc :: Src a -> N Int -> Eff
 lengthSrc s k = s (Cont (lengthSnk k))
 
+-- | Discard the source contents; return the length.
 lengthSnk :: N Int -> Snk a
 lengthSnk ni Nil = ni 0
 lengthSnk ni (Cons _ s) = lengthSrc s (ni . (+1))
@@ -50,12 +61,10 @@ pipe k = do
   k (src,snk)
 
 plug :: Snk a
-plug Nil = return ()
-plug (Cons a s) = s Full
+plug = close
 
 empty :: Src a
-empty Full = return ()
-empty (Cont s) = s Nil
+empty = done
 
 unzipSnk :: Snk (a,b) -> Source a -> Source b -> Eff
 unzipSnk s Nil _ = s Nil
@@ -112,13 +121,7 @@ dropSnk i s (Cons a s') = s' (Cont (dropSnk (i-1) s))
 
 
 hReadSrc :: Handle -> Src Char
-hReadSrc h Full = hClose h
-hReadSrc h (Cont s) = do
-  b <- hIsEOF h
-  if b then s Nil
-     else do
-       x <- hGetChar h
-       s (Cons x (hReadSrc h))
+hReadSrc = readF
 
 readSrc :: FilePath -> Src Char
 readSrc file sink = do
@@ -140,13 +143,21 @@ replicateSrc _ _ Full = return ()
 replicateSrc 0 _ (Cont s) = s Nil
 replicateSrc i a (Cont s) = s (Cons a (replicateSrc (i-1) a))
 
-srcToSnk :: Src a -> Snk (N a)
-srcToSnk s Nil = s Full
-srcToSnk s (Cons a s') = s (Cont (srcToSnkN a s'))
+dnsSink :: Sink (NN a) -> NN (Sink a)
+dnsSink Full k = k Full
+dnsSink (Cont s) k = help k s
 
-srcToSnkN :: N a -> Src (N a) -> Snk a
-srcToSnkN na s Nil = s Full -- ? I'm dropping the na here
-srcToSnkN na s (Cons a s') = na a >> s (Cont (srcToSnk s'))
+help :: N (Sink a) -> N (Source (NN a)) -> Eff
+help k1 k2 = open k1 $ \x -> smap (\y k -> k (shift y)) x k2 -- overkill
+
+srcToSnk :: Src a -> Snk (N a)
+srcToSnk k1 s2 = dnsSink (sourceToSink s2) k1
+-- srcToSnk s Nil = s Full
+-- srcToSnk s (Cons a s') = s (Cont (srcToSnkN a s'))
+
+-- srcToSnkN :: N a -> Src (N a) -> Snk a
+-- srcToSnkN na s Nil = s Full -- ? I'm dropping the na here
+-- srcToSnkN na s (Cons a s') = na a >> s (Cont (srcToSnk s'))
 
 cons :: a -> Src a -> Src a
 cons a s Full = s Full
@@ -173,11 +184,11 @@ hWriteFileSnk h (Cons c s) = do
   hPutChar h c
   s (Cont (hWriteFileSnk h))
 
+deadlock :: Eff
 deadlock = pipe (\(src,snk) -> compose src snk)
 
 displaySnk :: Show a => Snk a
-displaySnk Nil = return ()
-displaySnk (Cons a s) = print a >> s (Cont displaySnk)
+displaySnk = display
 
 linesSrc :: Src Char -> Src String
 linesSrc s Full = s Full
