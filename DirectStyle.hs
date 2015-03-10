@@ -67,8 +67,8 @@ empty :: Src a
 empty = done
 
 unzipSnk :: Snk (a,b) -> Source a -> Source b -> Eff
-unzipSnk s Nil _ = s Nil
-unzipSnk s _ Nil = s Nil
+unzipSnk s Nil (Cons _ s') = s' Full >> s Nil
+unzipSnk s (Cons _ s') Nil = s' Full >> s Nil
 unzipSnk s (Cons a s1) (Cons b s2) = s (Cons (a,b) (zipSrc s1 s2))
 
 zipSrc :: Src a -> Src b -> Src (a,b)
