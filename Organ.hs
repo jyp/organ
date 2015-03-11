@@ -46,6 +46,14 @@ instance Monad IO' where
   return = IO . shift
   (IO k) >>= f = IO $ \b -> k (\a -> fromIO (f a) b)
 
+runNN :: NN a -> IO a
+runNN k = do
+  ref <- newIORef undefined
+  k (writeIORef ref)
+  readIORef ref
+
+runIO' :: IO' a -> IO a
+runIO' = runNN . fromIO
 
 --------------------------
 -- Pipe, source, sink.
