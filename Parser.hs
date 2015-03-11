@@ -63,6 +63,7 @@ import Control.Monad
   , ap
   )
 import Organ (Source(..), Sink(..), N, NN, shift)
+import DirectStyle (srcToSource)
 
 -------------------------------------------------------------------------
 -- type Parser
@@ -232,6 +233,8 @@ longestResultIO p0 ret src = scan p0 Nothing src
   dropSrc _ Nil k = k Nil
   dropSrc n (Cons _ cs) k = cs $ Cont $ \ys -> dropSrc (n-1) ys k
 
+longestResultIO' :: P s a -> N (Sink s) -> NN (ParseResult s a)
+longestResultIO' p src k = srcToSource src (longestResultIO p k)
 
 longestResults :: ParseMethod s a [a]
 longestResults p0 = scan p0 [] [] 
