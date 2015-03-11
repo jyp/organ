@@ -16,6 +16,23 @@ unshiftSnk k1 k2 = k1 $ \x -> fwd k2 x
 unshiftSrc :: N (Snk a) -> Src a
 unshiftSrc k1 k2 = k1 $ \x -> fwd x k2
 
+-- Converting between Source and Src, Sink and Snk
+
+sinkToSnk :: Sink a -> Snk a
+sinkToSnk Full Nil = return ()
+sinkToSnk Full (Cons a n) = n Full
+sinkToSnk (Cont f) s = f s
+
+sourceToSrc :: Source a -> Src a
+sourceToSrc Nil Full = return ()
+sourceToSrc (Cons a n) Full = n Full
+sourceToSrc s (Cont f) = f s
+
+snkToSink :: Snk a -> NN (Sink a)
+snkToSink k kk = kk (Cont k)
+
+srcToSource :: Src a -> NN (Source a)
+srcToSource k kk = k (Cont kk)
 
 -- Perhaps better name is "forward" (see ax in LL)
 compose :: Src a -> Snk a -> Eff
