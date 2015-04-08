@@ -128,7 +128,7 @@ yield _ Full k = k Full
 yield x (Cont c) k = c (Cons x k)
 
 -- | Yield some data, sent to a sink. If the sink is full, handle that
--- case specially
+-- case specially (!!! Probably nonsense.)
 yield' :: a -> Sink a -> Eff -> (Sink a -> Eff) -> Eff
 yield' _ Full     full _ = full
 yield' x (Cont c) _    k = c (Cons x k)
@@ -144,6 +144,13 @@ display :: Show a => Source a -> Eff
 display src = await src (return ()) $ \x xs -> do
     print x
     display xs
+
+-- | Display all the data available from a source
+display' :: Show a => Source a -> Eff
+display' Nil = return ()
+display' (Cons x cs) = do
+  print x
+  cs $ Cont $ display'
 
 -- | Display @n@ pieces of data from a source (if available)
 displayN :: Show a => Int -> Source a -> Eff
