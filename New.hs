@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, TypeOperators #-}
 module New where
 
 import System.IO
@@ -120,6 +120,12 @@ unshiftSnk k1 k2 = k1 $ \x -> fwd k2 x
 
 unshiftSrc :: N (Snk a) -> Src a
 unshiftSrc k1 k2 = k1 $ \x -> fwd x k2
+
+snkToSink :: Snk a -> N (Src a)
+snkToSink k kk = kk (Cont k)
+
+srcToSource :: Src a -> N (Snk a)
+srcToSource k kk = k (Cont kk)
 
 
 -- Perhaps better name is "forward" (see ax in LL)
@@ -271,7 +277,55 @@ concatAux snk ssrc (Cons a s) = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
 -- TODO: concatSnkSnk ?
 
 
--- TODO: co-objects
+--------------------------------------------
+-- co-objects
+--------------------------------------------
+
+-- | Demultiplex
+dmux :: Source' (Either a b) -> Sink' a -> Sink' b -> Eff
+dmux Nil ta tb = fwd Nil ta >> fwd Nil tb
+dmux (Cons ab c) ta tb = case ab of
+  Left a -> c $ Cont $ \src' -> case ta of
+    Full -> fwd Nil tb >> plug src'
+    Cont k -> k (Cons a $ \ta' -> dmux src' ta' tb)
+  -- TODO: right
+
+dmux' :: Src (Either a b) -> Snk a -> Snk b -> Eff
+dmux' sab' ta' tb' =
+  snkToSink ta' $ \ta ->
+  snkToSink tb' $ \tb ->
+  srcToSource sab' $ \sab ->
+  dmux sab ta tb
+
+type CoSrc a = Snk (N a)
+type CoSnk a = Src (N a)
+type a & b = N (Either (N a) (N b))
+
+
+dnintro :: Src a -> Src (NN a)
+dnintro k Full = k Full
+dnintro s (Cont k) = s $ Cont $ dndel' k
+
+dndel :: Src (NN a) -> Src a
+dndel s Full = s Full
+dndel s (Cont k) = s $ Cont $ dnintro' k
+
+dnintro' :: Snk a -> Snk (NN a)
+dnintro' k Nil = k Nil
+dnintro' k (Cons x xs) = x $ \x' -> k (Cons x' $ dndel xs)
+
+dndel' :: Snk (NN a) -> Snk a
+dndel' s Nil = s Nil
+dndel' s (Cons x xs) = s (Cons (shift x) (dnintro xs))
+
+mux :: CoSrc a -> CoSrc b -> CoSnk (a & b) -> Eff
+mux sa sb tab = dmux' (dndel tab) sa sb
+
+-- | Display a CoSource of strings. This function does not control the
+-- order of printing the elements.
+coFileSink :: Handle -> CoSnk String
+coFileSink h Full = hClose h
+coFileSink h (Cont c) = c (Cons (hPutStrLn h) (coFileSink h))
 
 
 main = test1
