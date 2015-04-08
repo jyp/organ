@@ -276,7 +276,8 @@ concatAux snk ssrc (Cons a s) = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
 
 -- TODO: concatSnkSnk ?
 
-
+----
+-- Transition: what can you do if you want more flexibility?
 --------------------------------------------
 -- co-objects
 --------------------------------------------
@@ -321,11 +322,80 @@ dndel' s (Cons x xs) = s (Cons (shift x) (dnintro xs))
 mux :: CoSrc a -> CoSrc b -> CoSnk (a & b) -> Eff
 mux sa sb tab = dmux' (dndel tab) sa sb
 
+-- mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
+-- mux' sa sb tab = mux sa sb _
+
 -- | Display a CoSource of strings. This function does not control the
 -- order of printing the elements.
 coFileSink :: Handle -> CoSnk String
 coFileSink h Full = hClose h
 coFileSink h (Cont c) = c (Cons (hPutStrLn h) (coFileSink h))
 
+coFileSrc :: Handle -> CoSrc String
+coFileSrc h Nil = hClose h
+coFileSrc h (Cons x xs) = do
+  e <- hIsEOF h
+  if e then do
+         hClose h
+         xs Full
+       else do
+         forkIO $ x =<< hGetLine h
+         xs $ Cont $ coFileSrc h
+
+
+-- | Loop through two sources and make them communicate
+sequentially :: Source' a -> Source' (N a) -> Eff
+sequentially Nil (Cons _ xs) = xs Full
+sequentially (Cons _ xs) Nil = xs Full
+sequentially (Cons x xs) (Cons x' xs') = do
+  -- C.forkIO $ x' x parallel zipping
+  x' x
+  xs (Cont $ \sa -> xs' $ Cont $ \sna -> sequentially sa sna)
+
+concurrently :: Source' a -> Source' (N a) -> Eff
+concurrently Nil (Cons _ xs) = xs Full
+concurrently (Cons _ xs) Nil = xs Full
+concurrently (Cons x xs) (Cons x' xs') = do
+  C.forkIO $ x' x
+  xs (Cont $ \sa -> xs' $ Cont $ \sna -> concurrently sa sna)
+
+
+type Strategy a = Source' a -> Source' (N a) -> Eff
+
+srcToCoSrc :: Strategy a -> Src a -> CoSrc a
+srcToCoSrc strat k s0 = k $ Cont $ \ s1 -> strat s1 s0
+
+coSnkToSnk :: Strategy a -> CoSnk a -> Snk a
+coSnkToSnk strat k s0 = k $ Cont $ \ s1 -> strat s0 s1
+
+type Buffering a = CoSrc a -> Src a
+
+fromList :: [a] -> Source' a
+fromList (a':as') = Cons a' $ \snk -> case snk of
+  (Cont s) -> s (fromList as')
+  Full -> return ()
+
+
+chanCoSnk :: C.Chan a -> CoSnk a
+chanCoSnk h Full = return ()
+chanCoSnk h (Cont c) = c (Cons (C.writeChan h) (chanCoSnk h))
+
+chan :: Buffering a
+chan f g = do
+  c <- C.newChan
+  forkIO $ forward (chanCoSnk c) f 
+  chanSrc c g
+
+chanSrc :: C.Chan a -> Src a
+chanSrc h Full = return ()
+chanSrc h (Cont c) = do x <- C.readChan h
+                        c (Cons x $ chanSrc h)
+
+
+swpBuffering :: Buffering a -> Snk a -> CoSrc a
+swpBuffering f s g = f s _
+
+-- CoSnk ~ Src ~ ⊗
+-- CoSrc ~ Snk ~ ⅋
 
 main = test1
