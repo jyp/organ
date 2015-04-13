@@ -1,3 +1,11 @@
 *~
 *.hi
 *.o
+/Organ.log
+/Organ.pdf
+/Organ.ptb
+/Organ.tex
+/texput.log
+/Organ.out
+/Organ.md.lhs
+/Organ.aux

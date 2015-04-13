@@ -17,34 +17,35 @@
 
  -->
 
-The Effect type. (The core library should be parametric over this
-type. However, IO being a common use case, we'll stick to that)
+# Preliminary: negations and continuations
+
 > type Eff = IO ()
 
 The type of continuations (Negation)
+
 > type N a = a -> Eff
 
 Double negation
+
 > type NN a = N (N a)
 
-Triple negation
-> type NNN a = N (NN a)
+Double negations can always be introduced, using the \var{shift} operator.
 
-Introducing a double negation
 > shift :: a -> NN a
 > shift x k = k x
 
-Collapsing three negations to one.  This means that, in the
-presence of effects, it is possible to remove double negations.
+It is never necessary to go beyond two negations. Indeed, triple
+negations can be shifted to one.  Equivalently, it is possible to
+remove double negations if a side-effect can be outputted.
+
 > unshift :: NNN a -> N a
 > unshift k x = k (shift x)
-unshift =  (. shift)
 
+The above two functions are the \var{return} and \var{join} of the
+double negation monad. However, we will not go that route --- single
+negations play a central role in our approach.
 
-Double negation is a monad; so we can recover our good old IO
-monad.. But we won't use it!
-
-Pipe, source, sink.
+# Streams
 
 
 A pipe can be accessed through both ends, explicitly.
