@@ -63,6 +63,21 @@ lenSnk :: Int -> N Int -> Snk a
 lenSnk i ni Nil = ni i
 lenSnk i ni (Cons _ s) = lenAcc (i+1) s ni
 
+chunk :: Int -> [a] -> Src a -> Src [a]
+chunk 0 xs src (Cont snk) = snk (Cons xs $ chunk 100 [] src)
+chunk 0 xs src Full = src Full
+
+dup :: Src a -> Src a
+dup src (Cont snk) = snk _
+
+dupSnk :: Snk a -> Snk a
+dupSnk src Nil = src Nil
+dupSnk src (Cons x xs) = src $ Cons x $ \ snk -> case snk of
+                                                     Full -> xs Full
+                                                     Cont k -> k (Cons x $ dup xs)
+
+
+
 data Status = Taken | Done
 
 pipe :: NN (Src a, Snk a)

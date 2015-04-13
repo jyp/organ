@@ -287,3 +287,9 @@ buffer f g = do
   C.forkIO $ f $ fromList $ repeat $ C.writeChan c
   g $ fromList $ x
 
+buffer1 :: a -> (Source (N a) -> Eff) -> (Source a -> Eff) -> Eff
+buffer1 a f g = do
+  c <- newRef a
+  C.forkIO $ f $ fromList $ repeat $ C.writeChan c
+  g $ fromList $ x
+

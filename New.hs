@@ -24,9 +24,6 @@ type NN a = N (N a)
 -- | Triple negation
 type NNN a = N (NN a)
 
--- | Quadruple negation
-type NNNN a = NN (NN a)
-
 -- | Introducing a double negation
 shift :: a -> NN a
 shift x k = k x
@@ -90,6 +87,9 @@ data Source' a = Nil | Cons a (N (Sink' a))
 data Sink' a = Full | Cont (N (Source' a))
 
 
+----------------------------------
+-- Duality of Source and Sink
+
 -- definition: a necessary condition for  A being dual to B is
 --  f : N A -> B     f' : A -> N B
 --  g : N B -> A     g' : B -> N A
@@ -111,8 +111,6 @@ unshiftSink = error "cannot be implemented!"
 type Src a = N (Sink' a)
 type Snk a = N (Source' a)
 
--- State the algebraic structure here (def. later)
--- (Functor, Monad?)
 
 -- Source and Sink are true duals:
 unshiftSnk :: N (Src a) -> Snk a
@@ -127,28 +125,37 @@ snkToSink k kk = kk (Cont k)
 srcToSource :: Src a -> N (Snk a)
 srcToSource k kk = k (Cont kk)
 
+-- State the algebraic structure here (def. later)
+-- (Functor, Monad?)
 
 -- Perhaps better name is "forward" (see ax in LL)
 forward :: Src a -> Snk a -> Eff
 forward source sink = source $ Cont sink
 
+
 empty :: Src a
 empty sink' = fwd Nil sink'
+
+cons :: a -> Src a -> Src a
 
 -- | Yield some data, sent to a sink. If the sink is full, ignore.
 yield :: a -> Sink' a -> (Sink' a -> Eff) -> Eff
 yield x (Cont c) k = c (Cons x k)
 yield _ Full k = k Full
 
-cons :: a -> Src a -> Src a
 cons a s s' = yield a s' s
-
 
 tail :: Src a -> Src a
 tail s Full = s Full
 tail s (Cont s') = s (Cont (\source -> case source of
   Nil -> s' Nil
   (Cons _ s'') -> forward s'' s'))
+
+
+
+
+plug :: Snk a
+plug source' = fwd source' Full
 
 
 -- -- !!! the continuations must contain the same set of free vars !!!
@@ -161,11 +168,18 @@ tail s (Cont s') = s (Cont (\source -> case source of
 -- match :: Eff -> (a -> Snk a) -> Snk a
 -- match nil' cons' k = await k nil' cons'
 
+-------------
+-- ???
 
-plug :: Snk a
-plug source' = fwd source' Full
+takeSrc :: Int -> Src a -> Src a
+takeSrc _ s Full = s Full
+takeSrc 0 s (Cont s') = s Full >> s' Nil -- Subtle case
+takeSrc i s (Cont s') = s (Cont (takeSnk i s'))
 
-
+takeSnk :: Int -> Snk a -> Snk a
+takeSnk _ s Nil = s Nil
+takeSnk 0 s (Cons _ s') = s Nil >> s' Full -- Subtle case
+takeSnk i s (Cons a s') = s (Cons a (takeSrc (i-1) s'))
 
 
 --------------
@@ -215,24 +229,16 @@ fileSrc file sink = do
   h <- openFile file ReadMode
   hFileSrc h sink
 
-takeSrc :: Int -> Src a -> Src a
-takeSrc _ s Full = s Full
-takeSrc 0 s (Cont s') = s Full >> s' Nil -- Subtle case
-takeSrc i s (Cont s') = s (Cont (takeSnk i s'))
 
-takeSnk :: Int -> Snk a -> Snk a
-takeSnk _ s Nil = s Nil
-takeSnk 0 s (Cons _ s') = s Nil >> s' Full -- Subtle case
-takeSnk i s (Cons a s') = s (Cons a (takeSrc (i-1) s'))
-
-
-test1 = forward (hFileSrc stdin) (takeSnk 3 $ fileSnk "text.txt") 
-
-
--- TODO: Example: a sink that prints 10 elements, connected with a
+-- Example: a sink that prints 10 elements, connected with a
 -- file reading source. (Check: close the file after reading only 10
 -- lines.)
 
+example1 = forward (hFileSrc stdin) (takeSnk 3 $ fileSnk "text.txt") 
+
+
+-------------------------
+-- Algebraic structure
 
 -- General pattern:
 
@@ -243,6 +249,8 @@ mapSrc f src (Cont s) = src (Cont (mapSnk f s))
 mapSnk :: (b -> a) -> Snk a -> Snk b
 mapSnk f snk Nil = snk Nil
 mapSnk f snk (Cons a s) = snk (Cons (f a) (mapSrc f s))
+
+
 
 
 -- src is a monad:
@@ -274,13 +282,65 @@ concatAux :: Snk a -> Src (Src a) -> Snk a
 concatAux snk ssrc Nil = snk Nil >> ssrc Full
 concatAux snk ssrc (Cons a s) = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
 
+
 -- TODO: concatSnkSnk ?
 
-----
--- Transition: what can you do if you want more flexibility?
+
+----------------------
+-- Synchronicity
+
+-- Seemingly asynchronous interface, but everything can (and is)
+-- executed synchronously: there is only one thread of control.
+
+-- A consequence of synchronicity is that there won't be implicity
+-- buffering of data. However, the programmer can still build lists
+-- explicity if so they decide.
+
+toList :: Src a -> NN [a]
+toList k1 k2 = k1 $ Cont $ \src -> case src of
+   Nil -> k2 []
+   Cons x xs -> toList xs $ \xs' -> k2 (x:xs')
+
+-- Transition: what can you do if you want more flexibility while
+-- remaining in the framework? (Asynchronous behaviour) (Useful to
+-- still have the guarantees locally, "breakage" is limited to
+-- explicit use of escape hatches.)
+
 --------------------------------------------
 -- co-objects
 --------------------------------------------
+
+
+
+concurrently :: Source' a -> Source' (N a) -> Eff
+concurrently Nil (Cons _ xs) = xs Full
+concurrently (Cons _ xs) Nil = xs Full
+concurrently (Cons x xs) (Cons x' xs') = do
+  C.forkIO $ x' x
+  xs (Cont $ \sa -> xs' $ Cont $ \sna -> concurrently sa sna)
+
+-- | Loop through two sources and make them communicate
+sequentially :: Source' a -> Source' (N a) -> Eff
+sequentially Nil (Cons _ xs) = xs Full
+sequentially (Cons _ xs) Nil = xs Full
+sequentially (Cons x xs) (Cons x' xs') = do
+  -- C.forkIO $ x' x parallel zipping
+  x' x
+  xs (Cont $ \sa -> xs' $ Cont $ \sna -> sequentially sa sna)
+
+
+
+type Strategy a = Source' a -> Source' (N a) -> Eff
+
+srcToCoSrc :: Strategy a -> Src a -> CoSrc a
+srcToCoSrc strat k s0 = k $ Cont $ \ s1 -> strat s1 s0
+
+coSnkToSnk :: Strategy a -> CoSnk a -> Snk a
+coSnkToSnk strat k s0 = k $ Cont $ \ s1 -> strat s0 s1
+
+
+
+-- TODO: nicer definition?
 
 -- | Demultiplex
 dmux :: Source' (Either a b) -> Sink' a -> Sink' b -> Eff
@@ -289,7 +349,9 @@ dmux (Cons ab c) ta tb = case ab of
   Left a -> c $ Cont $ \src' -> case ta of
     Full -> fwd Nil tb >> plug src'
     Cont k -> k (Cons a $ \ta' -> dmux src' ta' tb)
-  -- TODO: right
+  Right b -> c $ Cont $ \src' -> case tb of
+    Full -> fwd Nil ta >> plug src'
+    Cont k -> k (Cons b $ \tb' -> dmux src' ta tb')
 
 dmux' :: Src (Either a b) -> Snk a -> Snk b -> Eff
 dmux' sab' ta' tb' =
@@ -322,8 +384,8 @@ dndel' s (Cons x xs) = s (Cons (shift x) (dnintro xs))
 mux :: CoSrc a -> CoSrc b -> CoSnk (a & b) -> Eff
 mux sa sb tab = dmux' (dndel tab) sa sb
 
--- mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
--- mux' sa sb tab = mux sa sb _
+mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
+mux' sa sb = unshiftSnk $ mux sa sb
 
 -- | Display a CoSource of strings. This function does not control the
 -- order of printing the elements.
@@ -343,42 +405,17 @@ coFileSrc h (Cons x xs) = do
          xs $ Cont $ coFileSrc h
 
 
--- | Loop through two sources and make them communicate
-sequentially :: Source' a -> Source' (N a) -> Eff
-sequentially Nil (Cons _ xs) = xs Full
-sequentially (Cons _ xs) Nil = xs Full
-sequentially (Cons x xs) (Cons x' xs') = do
-  -- C.forkIO $ x' x parallel zipping
-  x' x
-  xs (Cont $ \sa -> xs' $ Cont $ \sna -> sequentially sa sna)
-
-concurrently :: Source' a -> Source' (N a) -> Eff
-concurrently Nil (Cons _ xs) = xs Full
-concurrently (Cons _ xs) Nil = xs Full
-concurrently (Cons x xs) (Cons x' xs') = do
-  C.forkIO $ x' x
-  xs (Cont $ \sa -> xs' $ Cont $ \sna -> concurrently sa sna)
-
-
-type Strategy a = Source' a -> Source' (N a) -> Eff
-
-srcToCoSrc :: Strategy a -> Src a -> CoSrc a
-srcToCoSrc strat k s0 = k $ Cont $ \ s1 -> strat s1 s0
-
-coSnkToSnk :: Strategy a -> CoSnk a -> Snk a
-coSnkToSnk strat k s0 = k $ Cont $ \ s1 -> strat s0 s1
 
 type Buffering a = CoSrc a -> Src a
-
-fromList :: [a] -> Source' a
-fromList (a':as') = Cons a' $ \snk -> case snk of
-  (Cont s) -> s (fromList as')
-  Full -> return ()
-
 
 chanCoSnk :: C.Chan a -> CoSnk a
 chanCoSnk h Full = return ()
 chanCoSnk h (Cont c) = c (Cons (C.writeChan h) (chanCoSnk h))
+
+chanSrc :: C.Chan a -> Src a
+chanSrc h Full = return ()
+chanSrc h (Cont c) = do x <- C.readChan h
+                        c (Cons x $ chanSrc h)
 
 chan :: Buffering a
 chan f g = do
@@ -386,11 +423,20 @@ chan f g = do
   forkIO $ forward (chanCoSnk c) f 
   chanSrc c g
 
-chanSrc :: C.Chan a -> Src a
-chanSrc h Full = return ()
-chanSrc h (Cont c) = do x <- C.readChan h
-                        c (Cons x $ chanSrc h)
+varCoSnk :: IORef a -> CoSnk a
+varCoSnk h Full = return ()
+varCoSnk h (Cont c) = c (Cons (writeIORef h) (varCoSnk h))
 
+varSrc :: IORef a -> Src a
+varSrc h Full = return ()
+varSrc h (Cont c) = do x <- readIORef h
+                       c (Cons x $ varSrc h)
+
+var :: a -> Buffering a
+var a f g = do
+  c <- newIORef a
+  forkIO $ forward (varCoSnk c) f 
+  varSrc c g
 
 swpBuffering :: Buffering a -> Snk a -> CoSrc a
 swpBuffering f s g = f s _
@@ -398,4 +444,4 @@ swpBuffering f s g = f s _
 -- CoSnk ~ Src ~ ⊗
 -- CoSrc ~ Snk ~ ⅋
 
-main = test1
+main = example1
