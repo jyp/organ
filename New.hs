@@ -286,11 +286,12 @@ concatAux snk ssrc (Cons a s) = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
 -- TODO: concatSnkSnk ?
 
 
-----------------------
 -- Synchronicity
 
 -- Seemingly asynchronous interface, but everything can (and is)
 -- executed synchronously: there is only one thread of control.
+
+-- every production is matched by a consuption (and vice versa)
 
 -- A consequence of synchronicity is that there won't be implicity
 -- buffering of data. However, the programmer can still build lists
@@ -301,48 +302,19 @@ toList k1 k2 = k1 $ Cont $ \src -> case src of
    Nil -> k2 []
    Cons x xs -> toList xs $ \xs' -> k2 (x:xs')
 
--- Transition: what can you do if you want more flexibility while
--- remaining in the framework? (Asynchronous behaviour) (Useful to
--- still have the guarantees locally, "breakage" is limited to
--- explicit use of escape hatches.)
-
 --------------------------------------------
--- co-objects
---------------------------------------------
+-- Co-objects
 
+-- Consequence: can de-multiplex, but cannot multiplex sources.
 
-
-concurrently :: Source' a -> Source' (N a) -> Eff
-concurrently Nil (Cons _ xs) = xs Full
-concurrently (Cons _ xs) Nil = xs Full
-concurrently (Cons x xs) (Cons x' xs') = do
-  C.forkIO $ x' x
-  xs (Cont $ \sa -> xs' $ Cont $ \sna -> concurrently sa sna)
-
--- | Loop through two sources and make them communicate
-sequentially :: Source' a -> Source' (N a) -> Eff
-sequentially Nil (Cons _ xs) = xs Full
-sequentially (Cons _ xs) Nil = xs Full
-sequentially (Cons x xs) (Cons x' xs') = do
-  -- C.forkIO $ x' x parallel zipping
-  x' x
-  xs (Cont $ \sa -> xs' $ Cont $ \sna -> sequentially sa sna)
-
-
-
-type Strategy a = Source' a -> Source' (N a) -> Eff
-
-srcToCoSrc :: Strategy a -> Src a -> CoSrc a
-srcToCoSrc strat k s0 = k $ Cont $ \ s1 -> strat s1 s0
-
-coSnkToSnk :: Strategy a -> CoSnk a -> Snk a
-coSnkToSnk strat k s0 = k $ Cont $ \ s1 -> strat s0 s1
-
+-- Can implement:
+-- mux :: Src (Either a b) -> Snk a -> Snk b -> Eff
 
 
 -- TODO: nicer definition?
 
--- | Demultiplex
+dmux' :: Src (Either a b) -> Snk a -> Snk b -> Eff
+
 dmux :: Source' (Either a b) -> Sink' a -> Sink' b -> Eff
 dmux Nil ta tb = fwd Nil ta >> fwd Nil tb
 dmux (Cons ab c) ta tb = case ab of
@@ -353,17 +325,69 @@ dmux (Cons ab c) ta tb = case ab of
     Full -> fwd Nil ta >> plug src'
     Cont k -> k (Cons b $ \tb' -> dmux src' ta tb')
 
-dmux' :: Src (Either a b) -> Snk a -> Snk b -> Eff
 dmux' sab' ta' tb' =
   snkToSink ta' $ \ta ->
   snkToSink tb' $ \tb ->
   srcToSource sab' $ \sab ->
   dmux sab ta tb
 
+-- This is not implementable (without resorting to primitives in the
+-- IO monad):
+
+-- mux :: Src a -> Src b -> Src (Either a b)
+
+-- or even
+-- muxWith :: Src a -> Src b -> Src (a & b)
+-- (on subsequent readings, one might wonder about it)
+
+
+-- However we can implement this one:
+
+mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
+
+-- where
+type a & b = N (Either (N a) (N b))
 type CoSrc a = Snk (N a)
 type CoSnk a = Src (N a)
-type a & b = N (Either (N a) (N b))
 
+-- Indeed, a sink of "N a" is a source of "a" (albeit different
+-- properties), and dually a source of "N a" is a kind of sink of a.
+
+
+-- A co-source
+
+-- TODO: what about their algebraic structure?
+
+-- One access elements of a co-source only "one at a time"; for
+-- example the following can't be implemented:
+
+toList' :: CoSrc a -> NN [a]
+-- toList' k1 k2 = k1 $ Cons _ _
+-- toList' k1 k2 = k2 $ _ : _
+toList' = error "impossible"
+
+-- Yet it's possible to define useful co-sources and co-sinks.
+
+-- | Display a CoSource of strings. This function does not control the
+-- order of printing the elements.
+coFileSink :: Handle -> CoSnk String
+coFileSink h Full = hClose h
+coFileSink h (Cont c) = c (Cons (hPutStrLn h) (coFileSink h))
+
+coFileSrc :: Handle -> CoSrc String
+coFileSrc h Nil = hClose h
+coFileSrc h (Cons x xs) = do
+  e <- hIsEOF h
+  if e then do
+         hClose h
+         xs Full
+       else do
+         forkIO $ x =<< hGetLine h
+         xs $ Cont $ coFileSrc h
+
+
+-- Finally, here is the def. of mux' in all its glory.
+mux' sa sb = unshiftSnk $ mux sa sb
 
 dnintro :: Src a -> Src (NN a)
 dnintro k Full = k Full
@@ -384,30 +408,72 @@ dndel' s (Cons x xs) = s (Cons (shift x) (dnintro xs))
 mux :: CoSrc a -> CoSrc b -> CoSnk (a & b) -> Eff
 mux sa sb tab = dmux' (dndel tab) sa sb
 
-mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
-mux' sa sb = unshiftSnk $ mux sa sb
+-- This all preserves synchronicity still.
 
--- | Display a CoSource of strings. This function does not control the
--- order of printing the elements.
-coFileSink :: Handle -> CoSnk String
-coFileSink h Full = hClose h
-coFileSink h (Cont c) = c (Cons (hPutStrLn h) (coFileSink h))
+-----------
+-- Asynch
 
-coFileSrc :: Handle -> CoSrc String
-coFileSrc h Nil = hClose h
-coFileSrc h (Cons x xs) = do
-  e <- hIsEOF h
-  if e then do
-         hClose h
-         xs Full
-       else do
-         forkIO $ x =<< hGetLine h
-         xs $ Cont $ coFileSrc h
+-- Transition: what can you do if you want more flexibility while
+-- remaining in the framework? (Asynchronous behaviour) (Useful to
+-- still have the guarantees locally, "breakage" is limited to
+-- explicit use of escape hatches.)
 
 
+-- 1. Concurrency opportunities arise whenever we convert from Src to
+-- CoSrc or dually from CoSnk to Snk.
+
+-- For every concurrency strategy we can build such a conversion:
+
+srcToCoSrc :: Strategy a -> Src a -> CoSrc a
+srcToCoSrc strat k s0 = k $ Cont $ \ s1 -> strat s1 s0
+
+coSnkToSnk :: Strategy a -> CoSnk a -> Snk a
+coSnkToSnk strat k s0 = k $ Cont $ \ s1 -> strat s0 s1
+
+-- what a strat. is:
+type Strategy a = Source' a -> Source' (N a) -> Eff
+
+-- examples
+concurrently :: Source' a -> Source' (N a) -> Eff
+concurrently Nil (Cons _ xs) = xs Full
+concurrently (Cons _ xs) Nil = xs Full
+concurrently (Cons x xs) (Cons x' xs') = do
+  C.forkIO $ x' x
+  xs (Cont $ \sa -> xs' $ Cont $ \sna -> concurrently sa sna)
+
+-- | Loop through two sources and make them communicate
+sequentially :: Source' a -> Source' (N a) -> Eff
+sequentially Nil (Cons _ xs) = xs Full
+sequentially (Cons _ xs) Nil = xs Full
+sequentially (Cons x xs) (Cons x' xs') = do
+  -- C.forkIO $ x' x parallel zipping
+  x' x
+  xs (Cont $ \sa -> xs' $ Cont $ \sna -> sequentially sa sna)
+
+-- 2. Buffering requirements.  Buffering is required whenever one
+-- converts from a CoSrc to a Src (or dually ...)
 
 type Buffering a = CoSrc a -> Src a
 
+-- These buffering operations can be implemented by accessing the
+-- underlying buffering features of the IO monad.
+
+-- example:
+
+fileBuffer :: Buffering String
+fileBuffer f g = do
+  h' <- openFile  "tmp" WriteMode
+  forkIO $ forward (coFileSink h') f
+
+  h <- openFile "tmp" ReadMode
+  hFileSrc h g
+
+-- The above buffer works only if there is no static dep
+
+-- TODO: chat server.
+-- chat :: 
+
+-- More useful buffering:
 chanCoSnk :: C.Chan a -> CoSnk a
 chanCoSnk h Full = return ()
 chanCoSnk h (Cont c) = c (Cons (C.writeChan h) (chanCoSnk h))
@@ -417,12 +483,14 @@ chanSrc h Full = return ()
 chanSrc h (Cont c) = do x <- C.readChan h
                         c (Cons x $ chanSrc h)
 
-chan :: Buffering a
-chan f g = do
+chanBuffer :: Buffering a
+chanBuffer f g = do
   c <- C.newChan
   forkIO $ forward (chanCoSnk c) f 
   chanSrc c g
 
+
+-- For statuses  things like mouse pos. event, where only the last message matters.
 varCoSnk :: IORef a -> CoSnk a
 varCoSnk h Full = return ()
 varCoSnk h (Cont c) = c (Cons (writeIORef h) (varCoSnk h))
@@ -432,8 +500,8 @@ varSrc h Full = return ()
 varSrc h (Cont c) = do x <- readIORef h
                        c (Cons x $ varSrc h)
 
-var :: a -> Buffering a
-var a f g = do
+varBuffer :: a -> Buffering a
+varBuffer a f g = do
   c <- newIORef a
   forkIO $ forward (varCoSnk c) f 
   varSrc c g
@@ -445,3 +513,4 @@ swpBuffering f s g = f s _
 -- CoSrc ~ Snk ~ ⅋
 
 main = example1
+
