@@ -1,4 +1,4 @@
-% The Classical Approach to IO Streams
+% A Classical Approach to IO Streaming
 
  <!--
 
@@ -15,6 +15,19 @@
 > import qualified Control.Concurrent as C
 
  -->
+
+# Intro: Goals and Examples
+
+A pipe can be accessed through both ends, explicitly.
+
+   Source -->  Program --> Sink
+
+Data is sent to a sink, and can be read from a source. The naming
+convention may seem counterintuitive, but it makes sense from the
+point of view of the Producer/Consumer programs using those objects.
+
+* Modularity
+* Synchronicity?
 
 # Preliminary: negations and continuations
 
@@ -44,19 +57,9 @@ The above two functions are the \var{return} and \var{join} of the
 double negation monad. However, we will not go that route --- single
 negations play a central role in our approach.
 
-# Streams
+## Linearity
 
-
-A pipe can be accessed through both ends, explicitly.
-
-    Producer --> Sink >------ Pipe ----> Source --> Consumer
-
-Data is sent to a sink, and can be read from a source. The naming
-convention may seem counterintuitive, but it makes sense from the
-point of view of the Producer/Consumer programs using those objects.
-
-
-Attention! For this to make sense, sinks and sources must be used linearly.
+Attention! For this to make sense, effect-valued functions must be used linearly. That is:
 
 1. They MUST NOT be duplicated (or shared!) That is, they may not be re-used after (after
 calling one of the primitive functions.)
@@ -67,17 +70,27 @@ Otherwise the effects contained in the objects may be run multiple
 times; and this can be bad! For example, the same file may be closed
 twice, etc. (Missiles ... ) or we may forget to run an effect
 
+# Streams
 
+A source of @a@'s. Given a source, one can:
 
-A source of @a@'s. Given a source, one can: 1. Obtain a certain
-number of @a@'s. Getting more than one requires to run effects. The
-source may be able to provide only a certain number of @a@'s
+1. Obtain a certain number of @a@'s. Getting more than one requires to
+run effects. The source may be able to provide only a certain number
+of @a@'s
+
 2. Close the source (notify that we will not demand any @a@ any
 longer).
+
+> data Source_0 a = Nil_0 | Cons_0 a (Source_0 a)
+
+To access the rest of the elements one must produce a sink.
+
 > data Source' a = Nil | Cons a (N (Sink' a))
+
 
 A sink of @a@'s. Given a sink, one can: 1. Send a number of
 @a@'s. 2. Close the sink
+
 > data Sink' a = Full | Cont (N (Source' a))
 
 Duality of Source and Sink
