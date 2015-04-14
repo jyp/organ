@@ -6,7 +6,7 @@
 > module New where
 
 > import System.IO
-> import Control.Concurrent.MVar
+> import Control.Concurrent.MVar 
 > import Control.Monad (ap)
 > import Control.Exception
 > import Control.Concurrent (forkIO)
@@ -16,7 +16,7 @@
 
  -->
 
-# Intro: Goals and Examples
+ # Intro: Goals and Examples
 
 A pipe can be accessed through both ends, explicitly.
 
@@ -29,35 +29,59 @@ point of view of the Producer/Consumer programs using those objects.
 * Modularity
 * Synchronicity?
 
-# Preliminary: negations and continuations
+Preliminary: negations and continuations
+========================================
+
+We begin by providing a type of effects. For users of the stream
+library, this type should remain abstract. However in this paper we
+will develop stream components. This is possible only if we pick a
+concrete type of effects. Because we will provide streams interacting
+with files, etc. we must pick \var{IO}.
 
 > type Eff = IO ()
 
-The type of continuations (Negation)
+We can then define negation as follows:
 
 > type N a = a -> Eff
 
-Double negation
+A shortcut for double and triple negations is also convenient.
 
 > type NN a = N (N a)
+> type NNN a = N (NN a)
 
-Double negations can always be introduced, using the \var{shift} operator.
+The basic idea (imported from classical logics) pervading this paper
+is that producing a result of type α is equivalent to consuming an
+argument of type $N α$. Dually, consuming an argument of type α is
+equivalent to producing a result of type $N α$.
+
+In classical logics, negation is involutive; that is:
+
+$NN a = a$
+
+However, because we work with Haskell, we do not have this
+equality. We can come close however.
+
+First, double negations can always be introduced, using the
+\var{shift} operator.
 
 > shift :: a -> NN a
 > shift x k = k x
 
-It is never necessary to go beyond two negations. Indeed, triple
-negations can be shifted to one.  Equivalently, it is possible to
-remove double negations if a side-effect can be outputted.
+Second, it is possible to remove double negations, as long as a
+side-effect can be outputted.  Equivalently, triple negations can be
+collapsed to a single one.
 
 > unshift :: NNN a -> N a
 > unshift k x = k (shift x)
 
 The above two functions are the \var{return} and \var{join} of the
-double negation monad. However, we will not go that route --- single
-negations play a central role in our approach.
+double negation monad. However, we will not be using this monadic
+structure anywhere in the following. Indeed, single negations play a
+central role in our approach.
 
-## Linearity
+
+Linearity
+---------
 
 Attention! For this to make sense, effect-valued functions must be used linearly. That is:
 
@@ -70,84 +94,122 @@ Otherwise the effects contained in the objects may be run multiple
 times; and this can be bad! For example, the same file may be closed
 twice, etc. (Missiles ... ) or we may forget to run an effect
 
-# Streams
+Streams
+=======
 
-A source of @a@'s. Given a source, one can:
-
-1. Obtain a certain number of @a@'s. Getting more than one requires to
-run effects. The source may be able to provide only a certain number
-of @a@'s
-
-2. Close the source (notify that we will not demand any @a@ any
-longer).
-
-> data Source_0 a = Nil_0 | Cons_0 a (Source_0 a)
-
-To access the rest of the elements one must produce a sink.
+We will define sources and sinks by mutual recursion. Producing a
+source means to select if the source is empty (\var{Nil}) or not
+(\var{Cons}). If the source is not empty, one must then produce an
+element and *consume* a sink.
 
 > data Source' a = Nil | Cons a (N (Sink' a))
-
-
-A sink of @a@'s. Given a sink, one can: 1. Send a number of
-@a@'s. 2. Close the sink
-
 > data Sink' a = Full | Cont (N (Source' a))
 
-Duality of Source and Sink
+Producing a sink means to select if one an accept more elements
+(\var{Cont}) or not (\var{Full}). In the former case, one must then be
+able to consume a source. The full case is useful for example when the
+sink encounters an exception.
 
-definition: a necessary condition for  A being dual to B is
-> f : N A -> B     f' : A -> N B
-> g : N B -> A     g' : B -> N A
+Note that, in order to produce (or consume) the next element, the
+source (or sink) must run the effects on the other side of the pipe.
 
-Forwarding (ax)
+This means that each production is matched by a consumption, and
+\textit{vice versa}.
+
+Linearity
+---------
+
+For streams to be used safely, we must have the following extra
+contract between the user and the implementer: **each \var{Eff}-valued
+variable must be used linearly**. For example, the last action of a
+sink will typically be closing the file. This can be guaranteed only
+if the actions are run until reaching the end of the pipe (either
+\var{Full} or \var{Nil}).
+
+In this paper, linearity is enforced by manual inspection. Doing so is
+error prone; fortunately implementing a linearity checker is
+straightforward. (TODO: if type variables can be instanciated by Eff
+things it's a bit tricky. (Need for two kinds of variables...) We do
+this instanciation in the concat function.)
+
+
+Basics
+------
+
+A few basic combinators for Source' and Sink' are the following.
+
+One can connect a source and a sink, as follows. The effect is the
+combined effect of all productions and consumptions on the stream.
+
 > fwd :: Source' a -> Sink' a -> Eff
 > fwd s (Cont s') = s' s
 > fwd Nil Full = return ()
 > fwd (Cons _ xs) Full = xs Full
 
-> shiftSource :: Source' a -> N (Sink' a)
-> shiftSource = fwd
- 
-source and sinks are NOT true duals:
+One send data to a sink. If the sink is full, the da"ta is ignored.
+The third argument is a continuation getting the "new" sink, that
+obtained after the "old" sink has consumed the data.
 
-> unshiftSink :: N (Sink' a) -> Source' a
-> unshiftSink = error "cannot be implemented!"
+> yield :: a -> Sink' a -> (Sink' a -> Eff) -> Eff
+> yield x (Cont c) k = c (Cons x k)
+> yield _ Full k = k Full
+
+One may want to provide the following function, waiting for data to be
+produced by a source. The second argument is the effect to run if no
+data is produced, and the third is the effect to run given the data
+and the remaining source.
+
+> await :: Source' a -> Eff -> (a -> Source' a -> Eff) -> Eff
+> await Nil eof _ = eof
+> await (Cons x cs) _ k = cs $ Cont $ \xs -> k x xs
+
+However, the above function breaks the linearity invariant, so we will
+refrain to use it as such. The pattern that it defines is still
+useful: it is valid when the second and third argument consume the
+sameset of variables.  Indeed, this condition is often satisfied.
+
+
+Baking in negations
+-------------------
+
+However, programming with Source' and Sink' is inherently
+continuation-heavy: negations must be explicitly added in many places.
+Therefore, we will use instead pre-negated versions of sources and sink:
 
 > type Src a = N (Sink' a)
 > type Snk a = N (Source' a)
 
-Source and Sink are true duals:
+These definitions have the added advantage to perfect the duality
+between sources and sinks. Indeed, a negated sink' cannot be converted
+to a source.
+
+> unshiftSink :: N (Sink' a) -> Source' a
+> unshiftSink = error "cannot be implemented!"
+
+All the following conversions are implementable:
 
 > unshiftSnk :: N (Src a) -> Snk a
-> unshiftSnk k1 k2 = k1 $ \x -> fwd k2 x
-
 > unshiftSrc :: N (Snk a) -> Src a
+> shiftSnk :: Snk a -> N (Src a)
+> shiftSrc :: Src a -> N (Snk a)
+
+> unshiftSnk k1 k2 = k1 $ \x -> fwd k2 x
 > unshiftSrc k1 k2 = k1 $ \x -> fwd x k2
+> shiftSnk k kk = kk (Cont k)
+> shiftSrc k kk = k (Cont kk)
 
-> snkToSink :: Snk a -> N (Src a)
-> snkToSink k kk = kk (Cont k)
- 
-> srcToSource :: Src a -> N (Snk a)
-> srcToSource k kk = k (Cont kk)
+A different reading of the type of shiftSrc reveals that it implements
+forwarding of data from Src to Snk:
 
-State the algebraic structure here (def. later)
-(Functor, Monad?)
-
-Perhaps better name is "forward" (see ax in LL)
 > forward :: Src a -> Snk a -> Eff
-> forward source sink = source $ Cont sink
+> forward = shiftSrc
 
+Given the above definitions, one can implement a natural API for sources:
 
 > empty :: Src a
 > empty sink' = fwd Nil sink'
 
 > cons :: a -> Src a -> Src a
-
-Yield some data, sent to a sink. If the sink is full, ignore.
-> yield :: a -> Sink' a -> (Sink' a -> Eff) -> Eff
-> yield x (Cont c) k = c (Cons x k)
-> yield _ Full k = k Full
-
 > cons a s s' = yield a s' s
 
 > tail :: Src a -> Src a
@@ -156,46 +218,55 @@ Yield some data, sent to a sink. If the sink is full, ignore.
 >   Nil -> s' Nil
 >   (Cons _ s'') -> forward s'' s'))
 
-
-
+Dually, the full sink is simply
 
 > plug :: Snk a
 > plug source' = fwd source' Full
 
 
--- !!! the continuations must contain the same set of free vars !!!
-
-> await :: Source' a -> Eff -> (a -> Source' a -> Eff) -> Eff
-> await Nil eof _ = eof
-> await (Cons x cs) _ k = cs $ Cont $ \xs -> k x xs
-
-
--- !!! nil and cons must contain the same set of free vars !!!
+A non-full sink decides what to do depending on the availability of
+data. We could write the following:
 
 > match :: Eff -> (a -> Snk a) -> Snk a
 > match nil' cons' k = await k nil' cons'
 
+However, calling await may break linearity, so we'll refrain to use
+match in the following.
 
-???
+
+Furthermore, both Src and Snk are functors and monads. The instances
+are somewhat involved, so we'll defer them to TODO. (Monad is a bit
+suspicious due to linearity)
+We will instead show how to implement more concrete functions for Src
+and Snk.
+
+Given a source, we can create a new source which ignores all but its
+first $n$ elements. Conversely, we can prune a Sink to consume only
+the first $n$ elements of a source.
 
 > takeSrc :: Int -> Src a -> Src a
+> takeSnk :: Int -> Snk a -> Snk a
+
+The natural implementation is by mutual recursion. The main subtlety
+is that, when reaching the $n$th element, both ends of the stream must
+be notified of its closing.
+
 > takeSrc _ s Full = s Full
 > takeSrc 0 s (Cont s') = s Full >> s' Nil -- Subtle case
 > takeSrc i s (Cont s') = s (Cont (takeSnk i s'))
 
-> takeSnk :: Int -> Snk a -> Snk a
 > takeSnk _ s Nil = s Nil
 > takeSnk 0 s (Cons _ s') = s Nil >> s' Full -- Subtle case
 > takeSnk i s (Cons a s') = s (Cons a (takeSrc (i-1) s'))
 
+Effectful streams
+-----------------
 
+So far, we have constructed only effect-free streams. The fact that
+Eff = IO () was never used. In this section we fill this gap.
 
-File sink
-
-> fileSnk :: FilePath -> Snk String
-> fileSnk file s = do
->   h <- openFile file WriteMode
->   hFileSnk h s
+We first define the followig helper function, which sends data to a
+file; thus constructing a sink.
 
 > hFileSnk :: Handle -> Snk String
 > hFileSnk h Nil = hClose h
@@ -203,8 +274,19 @@ File sink
 >   hPutStrLn h c
 >   s (Cont (hFileSnk h))
 
+A file sink is then simply:
+
+> fileSnk :: FilePath -> Snk String
+> fileSnk file s = do
+>   h <- openFile file WriteMode
+>   hFileSnk h s
+
+And a sink for standard output is:
+
 > stdoutSnk :: Snk String
 > stdoutSnk = hFileSnk stdout
+
+A file source reads data from a file, as follows:
 
 > hFileSrc :: Handle -> Src String
 > hFileSrc h Full = hClose h
@@ -217,6 +299,32 @@ File sink
 >          x <- hGetLine h
 >          c (Cons x $ hFileSrc h)
 
+> fileSrc :: FilePath -> Src String
+> fileSrc file sink = do
+>   h <- openFile file ReadMode
+>   hFileSrc h sink
+
+We can then implement file copy as follows:
+
+> copyFile source target = forward (fileSrc source) (fileSnk target)
+
+It should be emphasised at this point that reading and writing will be
+interleaved: in order to produce the next file line (in the source),
+the current line must be consumed by writing it to disk (in the sink).
+The stream behaves fully synchronously, and no intermediate data is
+buffered.
+
+TODO: commentary
+
+> read3Lines = forward (hFileSrc stdin) (takeSnk 3 $ fileSnk "text.txt")
+
+Exception Handling
+------------------
+
+While the above implementations of file source and sink are fine for
+illustrative purposes, their production-strength versions should
+handle exceptions. Doing so is straightforward: our sinks and sources
+readily support early closing of the stream.
 
 > hFileSrcSafe :: Handle -> Src Char
 > hFileSrcSafe h Full = hClose h
@@ -231,20 +339,13 @@ File sink
 >            Nothing -> c Nil
 >            Just x -> c (Cons x $ hFileSrcSafe h)
 
-> fileSrc :: FilePath -> Src String
-> fileSrc file sink = do
->   h <- openFile file ReadMode
->   hFileSrc h sink
+(A safe file sink is left as an exercise to the reader)
 
 
-Example: a sink that prints 10 elements, connected with a
-file reading source. (Check: close the file after reading only 10
-lines.)
-
-> example1 = forward (hFileSrc stdin) (takeSnk 3 $ fileSnk "text.txt") 
 
 
 Algebraic structure
+-------------------
 
 General pattern:
 
@@ -260,6 +361,7 @@ General pattern:
 
 
 src is a monad:
+
 > appendSnk :: Snk a -> Snk a -> Snk a
 > appendSnk s1 s2 Nil = s1 Nil >> s2 Nil
 > appendSnk s1 s2 (Cons a s) = s1 (Cons a (forwardThenSrc s2 s))
@@ -331,9 +433,9 @@ TODO: nicer definition?
 >     Cont k -> k (Cons b $ \tb' -> dmux src' ta tb')
 
 > dmux' sab' ta' tb' =
->   snkToSink ta' $ \ta ->
->   snkToSink tb' $ \tb ->
->   srcToSource sab' $ \sab ->
+>   shiftSnk ta' $ \ta ->
+>   shiftSnk tb' $ \tb ->
+>   shiftSrc sab' $ \sab ->
 >   dmux sab ta tb
 
 This is not implementable (without resorting to primitives in the
@@ -351,6 +453,7 @@ However we can implement this one:
 > mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
 
 where
+
 > type a & b = N (Either (N a) (N b))
 > type CoSrc a = Snk (N a)
 > type CoSnk a = Src (N a)
@@ -367,14 +470,17 @@ One access elements of a co-source only "one at a time"; for
 example the following can't be implemented:
 
 > toList' :: CoSrc a -> NN [a]
+
 toList' k1 k2 = k1 $ Cons _ _
 toList' k1 k2 = k2 $ _ : _
+
 > toList' = error "impossible"
 
 Yet it's possible to define useful co-sources and co-sinks.
 
 Display a CoSource of strings. This function does not control the
 order of printing the elements.
+
 > coFileSink :: Handle -> CoSnk String
 > coFileSink h Full = hClose h
 > coFileSink h (Cont c) = c (Cons (hPutStrLn h) (coFileSink h))
@@ -392,6 +498,7 @@ order of printing the elements.
 
 
 Finally, here is the def. of mux' in all its glory.
+
 > mux' sa sb = unshiftSnk $ mux sa sb
 
 > dnintro :: Src a -> Src (NN a)
@@ -435,6 +542,7 @@ For every concurrency strategy we can build such a conversion:
 > coSnkToSnk strat k s0 = k $ Cont $ \ s1 -> strat s0 s1
 
 what a strat. is:
+
 > type Strategy a = Source' a -> Source' (N a) -> Eff
 
 examples
@@ -479,6 +587,7 @@ TODO: chat server.
 chat :: 
 
 More useful buffering:
+
 > chanCoSnk :: C.Chan a -> CoSnk a
 > chanCoSnk h Full = return ()
 > chanCoSnk h (Cont c) = c (Cons (C.writeChan h) (chanCoSnk h))
@@ -496,6 +605,7 @@ More useful buffering:
 
 
 For statuses  things like mouse pos. event, where only the last message matters.
+
 > varCoSnk :: IORef a -> CoSnk a
 > varCoSnk h Full = return ()
 > varCoSnk h (Cont c) = c (Cons (writeIORef h) (varCoSnk h))

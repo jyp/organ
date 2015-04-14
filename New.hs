@@ -151,8 +151,14 @@ tail s (Cont s') = s (Cont (\source -> case source of
   Nil -> s' Nil
   (Cons _ s'') -> forward s'' s'))
 
+head :: Src a -> NN (Maybe a)
+head k1 k2 = k1 $ Cont $ \src -> case src of
+  Nil -> k2 Nothing
+  (Cons x s'') -> s'' Full >> k2 (Just x)
 
-
+viewSrc :: Src a -> NN (Source' a)
+viewSrc k1 k2 = k1 $ Cont $ k2
+  
 
 plug :: Snk a
 plug source' = fwd source' Full
@@ -181,6 +187,10 @@ takeSnk _ s Nil = s Nil
 takeSnk 0 s (Cons _ s') = s Nil >> s' Full -- Subtle case
 takeSnk i s (Cons a s') = s (Cons a (takeSrc (i-1) s'))
 
+takeSink' :: Int -> Sink' a -> Sink' a
+takeSink' _ s Nil = s Nil
+takeSink' 0 s (Cons _ s') = s Nil >> s' Full -- Subtle case
+takeSink' i s (Cons a s') = s (Cons a (takeSrc (i-1) s'))
 
 --------------
 -- File sink
