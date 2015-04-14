@@ -1,5 +1,4 @@
 % The Classical Approach to IO Streams
-% Jean-Philippe Bernardy and Josef Svenningsson
 
  <!--
 
