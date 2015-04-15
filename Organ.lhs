@@ -205,6 +205,25 @@ forwarding of data from Src to Snk:
 > forward :: Src a -> Snk a -> Eff
 > forward = shiftSrc
 
+TODO: flow
+
+> dnintro :: Src a -> Src (NN a)
+> dnintro k Full = k Full
+> dnintro s (Cont k) = s $ Cont $ dndel' k
+
+> dndel :: Src (NN a) -> Src a
+> dndel s Full = s Full
+> dndel s (Cont k) = s $ Cont $ dnintro' k
+
+> dnintro' :: Snk a -> Snk (NN a)
+> dnintro' k Nil = k Nil
+> dnintro' k (Cons x xs) = x $ \x' -> k (Cons x' $ dndel xs)
+
+> dndel' :: Snk (NN a) -> Snk a
+> dndel' s Nil = s Nil
+> dndel' s (Cons x xs) = s (Cons (shift x) (dnintro xs))
+
+
 Examples: Effect-Free Streams
 -----------------------------
 
@@ -360,7 +379,7 @@ as well as those raised in a file sink.
 Algebraic structure
 -------------------
 
-Sources are functors, while sinks are covariant functors:
+Sources are functors, while sinks are contravariant functors:
 
 > mapSrc :: (a -> b) -> Src a -> Src b
 > mapSnk :: (b -> a) -> Snk a -> Snk b
@@ -406,8 +425,8 @@ src is a monad (!!! Linearity !!!)
 > concatAux snk ssrc (Cons a s) = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
 
 
-Synchronicity
--------------
+Synchronicity and Asynchronicity
+================================
 
 One of the main benefits of streams as defined here is that the
 programming interface appears to be asynchronous. That is, in the
@@ -466,54 +485,76 @@ value available on the source. Depending on its value, we feed the
 data to either of the sinks are proceed.
 
 
-
-Indeed, there is no
-
-This is not implementable (without resorting to primitives in the
-IO monad):
+> mux0 :: Src a -> Src b -> Src (Either a b)
+> mux0 sa sb tab = error "impossible"
 
 
-or even
-muxWith :: Src a -> Src b -> Src (a & b)
-(on subsequent readings, one might wonder about it)
+Try to begin by reading on a source. However, if we do this, the
+choice falls to us to choose which source to run first. We may pick
+sa, while it is blocking and sb is ready with data. This is not
+satisfactory situation.
 
-
-However we can implement this one:
-
-> mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
-
-where
+Can we let the choice fall on the consumer?
 
 > type a & b = N (Either (N a) (N b))
+
+> mux1 :: Src a -> Src b -> Src (a & b)
+
+ This helps, but we still can't implement the multiplexer.
+
+> mux1 sa sb (Cont tab) = tab $ Cons
+>                         (\ab -> case ab of
+>                                  Left a -> sa $ Cont $ \(Cons a' rest) -> a a')
+>                         (error "rest out of scope")
+
+Indeed the shape of the recursive call (second argument to Cons) must
+depend on the choice made by the consumer (first argument of
+Cons). However the type of Cons forces us to produce its arguments
+independently.
+
+What we need to do is to reverse the control fully: we need a data
+source which behaves like a sink on the outside.
+
+Co-Sources, Co-Sinks
+-------------------
+
+The structure we are looking for are co-sources. Which we study in this section.
+
+Remembering that producing $N a$ is equivalent to consuming $a$, we
+define:
+
 > type CoSrc a = Snk (N a)
 > type CoSnk a = Src (N a)
 
-Indeed, a sink of "N a" is a source of "a" (albeit different
-properties), and dually a source of "N a" is a kind of sink of a.
+Implementing mutlipexing on co-sources is straightforward, given
+demultiplexing on sources:
+
+> mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
+> mux' sa sb = unshiftSnk $ \tab -> dmux' (dndel tab) sa sb
 
 
-A co-source
+We use the rest of the section to study the property of co-sources and
+co-sinks.
 
-TODO: what about their algebraic structure?
+CoSrc is a functor, and CoSnk is a contravariant functor.
 
-One access elements of a co-source only "one at a time"; for
-example the following can't be implemented:
+> mapCoSrc :: (a -> b) -> CoSrc a -> CoSrc b
+> mapCoSrc f = mapSnk (\b' -> \a -> b' (f a))
+
+> mapCoSnk :: (b -> a) -> CoSnk a -> CoSnk b
+> mapCoSnk f = mapSrc (\b' -> \a -> b' (f a))
+
+
+One access elements of a co-source only "one at a time". One cannot
+extract the contents of a co-source as a list.
 
 > toList' :: CoSrc a -> NN [a]
+> toList' k1 k2 = k1 $ Cons (error "N a?") (error "rest")
+> toList' k1 k2 = k2 $ (error "a?") : (error "rest")
+> toList' k1 k2 = error "impossible"
 
-toList' k1 k2 = k1 $ Cons _ _
-toList' k1 k2 = k2 $ _ : _
-
-> toList' = error "impossible"
-
-Yet it's possible to define useful co-sources and co-sinks.
-
-Display a CoSource of strings. This function does not control the
-order of printing the elements.
-
-> coFileSink :: Handle -> CoSnk String
-> coFileSink h Full = hClose h
-> coFileSink h (Cont c) = c (Cons (hPutStrLn h) (coFileSink h))
+Yet it is possible to define useful and effectful co-sources and
+co-sinks. The first example is providing a file as a co-source:
 
 > coFileSrc :: Handle -> CoSrc String
 > coFileSrc h Nil = hClose h
@@ -523,100 +564,121 @@ order of printing the elements.
 >          hClose h
 >          xs Full
 >        else do
->          forkIO $ x =<< hGetLine h
->          xs $ Cont $ coFileSrc h
+>          x =<< hGetLine h          -- (1)
+>          xs $ Cont $ coFileSrc h   -- (2)
+
+Compared to fileSrc, the difference is that this function can
+decide the ordering of effects. That is, the effects (1) and (2) have
+no data dependency. Therefore they may be run in any order, including
+concurrently.
 
 
-Finally, here is the def. of mux' in all its glory.
+The second example is a co-sink which sends its contents to a file.
 
-> mux' sa sb = unshiftSnk $ mux sa sb
+> coFileSink :: Handle -> CoSnk String
+> coFileSink h Full = hClose h
+> coFileSink h (Cont c) = c (Cons (hPutStrLn h) (coFileSink h))
 
-> dnintro :: Src a -> Src (NN a)
-> dnintro k Full = k Full
-> dnintro s (Cont k) = s $ Cont $ dndel' k
+Compared to fileSnk, the difference is that one does not control the
+order of execution of effects. The effect of writing the current line
+is put in a data structure, and its execution is up to the source
+which one will eventually connect to the sink.
 
-> dndel :: Src (NN a) -> Src a
-> dndel s Full = s Full
-> dndel s (Cont k) = s $ Cont $ dnintro' k
+In sum, using co-sources and co-sinks shifts the flow of control from
+the sink to the source. It should be stressed that, in the programs
+which use the functions defined so far (and treats \var{Eff} as an
+abstract type otherwise) synchronicity is preserved. The next section
+generalises.
 
-> dnintro' :: Snk a -> Snk (NN a)
-> dnintro' k Nil = k Nil
-> dnintro' k (Cons x xs) = x $ \x' -> k (Cons x' $ dndel xs)
+Asynchronicity
+--------------
 
-> dndel' :: Snk (NN a) -> Snk a
-> dndel' s Nil = s Nil
-> dndel' s (Cons x xs) = s (Cons (shift x) (dnintro xs))
+We have seen so far that synchronicity gives useful guarantees, but
+restricts the kind of programs one can write. In this section, we will
+provide primitives which allow forms of asynchronous programming using
+our framework.
 
-> mux :: CoSrc a -> CoSrc b -> CoSnk (a & b) -> Eff
-> mux sa sb tab = dmux' (dndel tab) sa sb
+The main benefit of sticking to our framework in this case is that
+asynchronous behaviour is cornered to explicit usage of these
+primitives. That is, the benefits of synchronous programming still
+hold locally.
 
-This all preserves synchronicity still.
+\paragraph{Concurrency}
 
-Asynch
+When converting a Src to a CoSrc (or dually CoSnk to a Snk), we have
+two streams which are ready to respond to pulling of data from them.
+This means that concurrency opportunities arise, as we have seen an
+example above when manually converting the file source to a file
+co-source.
 
-Transition: what can you do if you want more flexibility while
-remaining in the framework? (Asynchronous behaviour) (Useful to
-still have the guarantees locally, "breakage" is limited to
-explicit use of escape hatches.)
-
-
-1. Concurrency opportunities arise whenever we convert from Src to
-CoSrc or dually from CoSnk to Snk.
-
-For every concurrency strategy we can build such a conversion:
+In general, given a concurrency strategy, we can implement the above
+conversions:
 
 > srcToCoSrc :: Strategy a -> Src a -> CoSrc a
-> srcToCoSrc strat k s0 = k $ Cont $ \ s1 -> strat s1 s0
-
 > coSnkToSnk :: Strategy a -> CoSnk a -> Snk a
-> coSnkToSnk strat k s0 = k $ Cont $ \ s1 -> strat s0 s1
 
-what a strat. is:
+We define a strategy as the reconciliation between a source and a
+co-sink:
 
 > type Strategy a = Source' a -> Source' (N a) -> Eff
 
-examples
+Implementing the conversions is then straightforward:
 
-> concurrently :: Source' a -> Source' (N a) -> Eff
-> concurrently Nil (Cons _ xs) = xs Full
-> concurrently (Cons _ xs) Nil = xs Full
-> concurrently (Cons x xs) (Cons x' xs') = do
->   C.forkIO $ x' x
->   xs (Cont $ \sa -> xs' $ Cont $ \sna -> concurrently sa sna)
+> srcToCoSrc strat k s0 = k $ Cont $ \ s1 -> strat s1 s0
+> coSnkToSnk strat k s0 = k $ Cont $ \ s1 -> strat s0 s1
 
-Loop through two sources and make them communicate
+There are (infinitely) many possible concurrency strategies, however
+we think that one will mostly be using either of the following two.
+The simplest one (used in \var{coFileSrc}) is sequential execution,
+and is defined by looping through both sources and match the
+consumptions/productions elementwise.
 
-> sequentially :: Source' a -> Source' (N a) -> Eff
+> sequentially :: Strategy a
 > sequentially Nil (Cons _ xs) = xs Full
 > sequentially (Cons _ xs) Nil = xs Full
 > sequentially (Cons x xs) (Cons x' xs') = do
 >   x' x
 >   xs (Cont $ \sa -> xs' $ Cont $ \sna -> sequentially sa sna)
 
-2. Buffering requirements.  Buffering is required whenever one
-converts from a CoSrc to a Src (or dually ...)
+Another possible strategy is concurrent execution. This strategy is
+useful if one expects production or consumption of elements to be
+expensive and distributable over computation units.
 
-> type Buffering a = CoSrc a -> Src a
+> concurrently :: Strategy a
+> concurrently Nil (Cons _ xs) = xs Full
+> concurrently (Cons _ xs) Nil = xs Full
+> concurrently (Cons x xs) (Cons x' xs') = do
+>   C.forkIO $ x' x
+>   xs (Cont $ \sa -> xs' $ Cont $ \sna -> concurrently sa sna)
 
-These buffering operations can be implemented by accessing the
-underlying buffering features of the IO monad.
+The above implementation naively spawns a thread for every element,
+but in reality one will most likely want to divide the stream into
+chunks before spawning threads. Because strategies are separate
+components, if it turns out that a bad choice was made it is easy to
+swap a strategy for another.
 
-example:
+\paragraph{Buffering}
 
-> fileBuffer :: Buffering String
+Consider now the situation where one needs to convert from a CoSrc to
+a Src (or from a Snk to a CoSnk).  Here, we have two streams which
+want to control the execution flow. The conversion can only be
+implemented by running both streams in concurrent threads, and have
+them communicate via a form of buffer. A form of buffer that we have
+seen before is the file. Using it yields the following buffering
+implementation:
+
+> fileBuffer :: CoSrc String -> Src String
 > fileBuffer f g = do
 >   h' <- openFile  "tmp" WriteMode
 >   forkIO $ forward (coFileSink h') f
-
 >   h <- openFile "tmp" ReadMode
 >   hFileSrc h g
 
-The above buffer works only if there is no static dep
-
-TODO: chat server.
-chat :: 
-
-More useful buffering:
+If the temporary file is a regular file, the above implementation is
+likely to fail. For example the reader may be faster than the writer
+and reach an end of file prematurely. Thus the temporary file should
+be a UNIX pipe. Yet, one may prefer to use Concurrent Haskell channels
+as a buffering means:
 
 > chanCoSnk :: C.Chan a -> CoSnk a
 > chanCoSnk h Full = return ()
@@ -627,14 +689,15 @@ More useful buffering:
 > chanSrc h (Cont c) = do x <- C.readChan h
 >                         c (Cons x $ chanSrc h)
 
-> chanBuffer :: Buffering a
+> chanBuffer :: CoSrc a -> Src a
 > chanBuffer f g = do
 >   c <- C.newChan
 >   forkIO $ forward (chanCoSnk c) f 
 >   chanSrc c g
 
-
-For statuses  things like mouse pos. event, where only the last message matters.
+In certain situations (for example for a stream yielding mouse
+positions), one may want to ignore all but the latest datum. In this
+case a single memory reference can serve as buffer:
 
 > varCoSnk :: IORef a -> CoSnk a
 > varCoSnk h Full = return ()
@@ -645,24 +708,40 @@ For statuses  things like mouse pos. event, where only the last message matters.
 > varSrc h (Cont c) = do x <- readIORef h
 >                        c (Cons x $ varSrc h)
 
-> varBuffer :: a -> Buffering a
+> varBuffer :: a -> CoSrc a -> Src a
 > varBuffer a f g = do
 >   c <- newIORef a
->   forkIO $ forward (varCoSnk c) f 
+>   forkIO $ forward (varCoSnk c) f
 >   varSrc c g
 
-> swpBuffering :: (forall a. Buffering a) -> Snk b -> CoSnk b
-> swpBuffering f s = f (dnintro' s)
+All the above bufferings work on sources, but they can be generically
+inverted to work on sinks, as follows.
 
-CoSnk ~ Src ~ ⊗
+> swap :: (forall a. CoSrc a -> Src a) -> Snk b -> CoSnk b
+> swap f s = f (dnintro' s)
+
+
+ <!--
 CoSrc ~ Snk ~ ⅋
+CoSrc ~ Snk ~ ⅋
+ -->
 
+Summary
+=======
+
+Table of abstract functions (implementable by the user, preserving syncronicity)
+
+Table of primitive functions (implementable by reference to IO, may break syncronicity)
 
 Related Work
 ============
 
 
 \citet{bernardy_composable_2015}
+
+"Conduits"
+
+"Pipes"
 
 
 Future Work
