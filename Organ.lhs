@@ -438,8 +438,6 @@ While the guarantees have been discussed so far, it may be unclear how
 synchronicity actually restricts the programs one can write. In the
 rest of the section we show by example how the restriction plays out.
 
-
-
 One operation supported by synchronous behaviour is demultiplexing of
 sources, by connecting it to two sinks.
 

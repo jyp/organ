@@ -134,6 +134,31 @@ unZipSrc0 sab ta tb = shiftSrc sab $ \sab' ->
                               (flip fwd sa)
                               (flip fwd sb)
 
+unZipSnk0 :: Snk (a,b) -> Src a -> Src b -> Eff
+unZipSnk0 sab ta tb =
+  shiftSrc ta $ \ta' ->
+  case ta' of
+    Nil -> tb Full >> sab Nil
+    Cons a as ->  shiftSrc tb $ \tb' ->  case tb' of
+      Nil -> as Full >> sab Nil
+      Cons b bs -> sab (Cons (a,b) $ \sab' -> unZipSnk0 (flip fwd sab') as bs)
+ 
+
+zipSnk :: Snk a -> Snk b -> Snk (a,b)
+zipSnk sa sb Nil = sa Nil >> sb Nil
+zipSnk sa sb (Cons (a,b) tab) = sa $ Cons a $ \sa' ->
+                                sb $ Cons b $ \sb' ->
+                                shiftSnk (zipSnk (flip fwd sa') (flip fwd sb')) tab
+
+scanSrc :: (a -> b -> b) -> b -> Src a -> Src b
+scanSrc f z src Full = src Full
+scanSrc f z src (Cont s) = src $ Cont $ scanSnk f z s
+
+scanSnk :: (a -> b -> b) -> b -> Snk b -> Snk a
+scanSnk f z snk Nil = snk Nil
+scanSnk f z snk (Cons a s) = snk $ Cons next $ scanSrc f next s
+  where next = f a z
+
 
 mapSrc :: (a -> b) -> Src a -> Src b
 mapSrc f src Full = src Full
