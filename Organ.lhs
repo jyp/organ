@@ -2,7 +2,7 @@
 
  <!--
 
-> {-# LANGUAGE ScopedTypeVariables, TypeOperators #-}
+> {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes #-}
 > module Organ where
 
 > import System.IO
@@ -348,7 +348,8 @@ reading a line in a file source.
 >          hClose h
 >          c Nil
 >        else do
->          mx <- catch (Just <$> hGetLine h) (\(_ :: IOException) -> return Nothing)
+>          mx <- catch (Just <$> hGetLine h)
+>                (\(_ :: IOException) -> return Nothing)
 >          case mx of
 >            Nothing -> c Nil
 >            Just x -> c (Cons x $ hFileSrcSafe h)
@@ -467,11 +468,6 @@ value available on the source. Depending on its value, we feed the
 data to either of the sinks are proceed.
 
 
-However, one cannot meanigfully multiplex sources.
-
-> mux0 :: Source' a -> Source' b -> Source' (a & b)
-> mux0 Nil xs = _
-> mux
 
 Indeed, there is no
 
@@ -657,8 +653,8 @@ For statuses  things like mouse pos. event, where only the last message matters.
 >   forkIO $ forward (varCoSnk c) f 
 >   varSrc c g
 
-> swpBuffering :: Buffering a -> Snk a -> CoSrc a
-> swpBuffering f s g = f s _
+> swpBuffering :: (forall a. Buffering a) -> Snk b -> CoSnk b
+> swpBuffering f s = f (dnintro' s)
 
 CoSnk ~ Src ~ ⊗
 CoSrc ~ Snk ~ ⅋
