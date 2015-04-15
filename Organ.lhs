@@ -3,7 +3,7 @@
  <!--
 
 > {-# LANGUAGE ScopedTypeVariables, TypeOperators #-}
-> module New where
+> module Organ where
 
 > import System.IO
 > import Control.Concurrent.MVar 
@@ -44,10 +44,9 @@ We can then define negation as follows:
 
 > type N a = a -> Eff
 
-A shortcut for double and triple negations is also convenient.
+A shortcut for double negations is also convenient.
 
 > type NN a = N (N a)
-> type NNN a = N (NN a)
 
 The basic idea (imported from classical logics) pervading this paper
 is that producing a result of type α is equivalent to consuming an
@@ -71,7 +70,7 @@ Second, it is possible to remove double negations, as long as a
 side-effect can be outputted.  Equivalently, triple negations can be
 collapsed to a single one.
 
-> unshift :: NNN a -> N a
+> unshift :: NN (N a) -> N a
 > unshift k x = k (shift x)
 
 The above two functions are the \var{return} and \var{join} of the
@@ -79,20 +78,6 @@ double negation monad. However, we will not be using this monadic
 structure anywhere in the following. Indeed, single negations play a
 central role in our approach.
 
-
-Linearity
----------
-
-Attention! For this to make sense, effect-valued functions must be used linearly. That is:
-
-1. They MUST NOT be duplicated (or shared!) That is, they may not be re-used after (after
-calling one of the primitive functions.)
-
-2. They MUST be consumed (or passed to a function consuming them)
-
-Otherwise the effects contained in the objects may be run multiple
-times; and this can be bad! For example, the same file may be closed
-twice, etc. (Missiles ... ) or we may forget to run an effect
 
 Streams
 =======
@@ -121,7 +106,23 @@ Linearity
 
 For streams to be used safely, we must have the following extra
 contract between the user and the implementer: **each \var{Eff}-valued
-variable must be used linearly**. For example, the last action of a
+variable must be used linearly**. That is, assuming $x$ an \var{Eff}-valued
+variable:
+
+1. The variable $x$ may not be duplicated or shared. In particular, if
+passed as an argument to a function it may not be used again.
+
+2. The variable $x$ must be consumed (or passed to a function, which
+will be in charged of consuming it).
+
+
+If the above condition is not respected, the effects contained in the
+objects may be run multiple times; and this can be bad! For example,
+the same file may be closed twice, etc. (Missiles ... ) or we may
+forget to run an effect
+
+
+For example, the last action of a
 sink will typically be closing the file. This can be guaranteed only
 if the actions are run until reaching the end of the pipe (either
 \var{Full} or \var{Nil}).
@@ -204,6 +205,9 @@ forwarding of data from Src to Snk:
 > forward :: Src a -> Snk a -> Eff
 > forward = shiftSrc
 
+Examples: Effect-Free Streams
+-----------------------------
+
 Given the above definitions, one can implement a natural API for sources:
 
 > empty :: Src a
@@ -236,9 +240,8 @@ match in the following.
 
 Furthermore, both Src and Snk are functors and monads. The instances
 are somewhat involved, so we'll defer them to TODO. (Monad is a bit
-suspicious due to linearity)
-We will instead show how to implement more concrete functions for Src
-and Snk.
+suspicious due to linearity) We will instead show how to implement
+more concrete functions for Src and Snk.
 
 Given a source, we can create a new source which ignores all but its
 first $n$ elements. Conversely, we can prune a Sink to consume only
@@ -259,8 +262,8 @@ be notified of its closing.
 > takeSnk 0 s (Cons _ s') = s Nil >> s' Full -- Subtle case
 > takeSnk i s (Cons a s') = s (Cons a (takeSrc (i-1) s'))
 
-Effectful streams
------------------
+Examples: Effectful streams
+---------------------------
 
 So far, we have constructed only effect-free streams. The fact that
 Eff = IO () was never used. In this section we fill this gap.
@@ -314,19 +317,30 @@ the current line must be consumed by writing it to disk (in the sink).
 The stream behaves fully synchronously, and no intermediate data is
 buffered.
 
-TODO: commentary
+When the sink is full, the source connected to it should be finalized.
+The next example shows what happens when a sink closes the stream
+early. Instead of connecting the source to a full sink, we connect it
+to one which stops receiving input after three lines.
 
 > read3Lines = forward (hFileSrc stdin) (takeSnk 3 $ fileSnk "text.txt")
+
+Indeed, testing the above program reveals that it properly closes
+stdin after reading three lines. This early closing of sinks allows
+modular stream programming. In particular, it is easy to support
+proper finalization in the presence of exceptions, as the next section shows.
 
 Exception Handling
 ------------------
 
 While the above implementations of file source and sink are fine for
 illustrative purposes, their production-strength versions should
-handle exceptions. Doing so is straightforward: our sinks and sources
-readily support early closing of the stream.
+handle exceptions. Doing so is straightforward: as shown above, our
+sinks and sources readily support early closing of the stream.
 
-> hFileSrcSafe :: Handle -> Src Char
+The following code fragment shows how to hande an exception when
+reading a line in a file source.
+
+> hFileSrcSafe :: Handle -> Src String
 > hFileSrcSafe h Full = hClose h
 > hFileSrcSafe h (Cont c) = do
 >   e <- hIsEOF h
@@ -334,33 +348,33 @@ readily support early closing of the stream.
 >          hClose h
 >          c Nil
 >        else do
->          mx <- catch (Just <$> hGetChar h) (\(_ :: IOException) -> return Nothing)
+>          mx <- catch (Just <$> hGetLine h) (\(_ :: IOException) -> return Nothing)
 >          case mx of
 >            Nothing -> c Nil
 >            Just x -> c (Cons x $ hFileSrcSafe h)
 
-(A safe file sink is left as an exercise to the reader)
-
-
-
+Exceptions raised in hIsEOF should be handled in a similar same way,
+as well as those raised in a file sink.
 
 Algebraic structure
 -------------------
 
-General pattern:
+Sources are functors, while sinks are covariant functors:
 
 > mapSrc :: (a -> b) -> Src a -> Src b
+> mapSnk :: (b -> a) -> Snk a -> Snk b
+
+The implementation follows the pattern introduced above: mapSrc and
+mapSnk are defined by mutual recursion.
+
 > mapSrc f src Full = src Full
 > mapSrc f src (Cont s) = src (Cont (mapSnk f s))
 
-> mapSnk :: (b -> a) -> Snk a -> Snk b
 > mapSnk f snk Nil = snk Nil
 > mapSnk f snk (Cons a s) = snk (Cons (f a) (mapSrc f s))
 
 
-
-
-src is a monad:
+src is a monad (!!! Linearity !!!)
 
 > appendSnk :: Snk a -> Snk a -> Snk a
 > appendSnk s1 s2 Nil = s1 Nil >> s2 Nil
@@ -391,36 +405,46 @@ src is a monad:
 > concatAux snk ssrc (Cons a s) = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
 
 
-TODO: concatSnkSnk ?
-
-
 Synchronicity
+-------------
 
-Seemingly asynchronous interface, but everything can (and is)
-executed synchronously: there is only one thread of control.
+One of the main benefits of streams as defined here is that the
+programming interface appears to be asynchronous. That is, in the
+source code, production and consumption of data are described in
+isolation and can be composed freely later. In other words, one can
+build a data source regardless of how the data is be consumed, or
+dually one can build a sink regardless of how the data is produced.
+Despite the apparent asynchronicity, all the code can (and is)
+executed synchronously: there is a single thread of control.
 
-every production is matched by a consuption (and vice versa)
-
-A consequence of synchronicity is that there won't be implicity
-buffering of data. However, the programmer can still build lists
-explicity if so they decide.
+A consequence of synchronicity is that the programer cannot be
+implicity buffering data: every production is matched by a consuption
+(and vice versa). However, one can buffer data by explicity
+buiding lists, if one so decides:
 
 > toList :: Src a -> NN [a]
 > toList k1 k2 = k1 $ Cont $ \src -> case src of
 >    Nil -> k2 []
 >    Cons x xs -> toList xs $ \xs' -> k2 (x:xs')
 
-Co-objects
+In sum, synchronicity restricts the kind of operations one can
+constructs, in exchange for two guarantees:
 
-Consequence: can de-multiplex, but cannot multiplex sources.
+1. Finalization of sources and stream is synchronous
+2. No implicit memory allocation happen
 
-Can implement:
-mux :: Src (Either a b) -> Snk a -> Snk b -> Eff
+While the guarantees have been discussed so far, it may be unclear how
+synchronicity actually restricts the programs one can write. In the
+rest of the section we show by example how the restriction plays out.
 
 
-TODO: nicer definition?
+
+One operation supported by synchronous behaviour is demultiplexing of
+sources, by connecting it to two sinks.
 
 > dmux' :: Src (Either a b) -> Snk a -> Snk b -> Eff
+
+which we can implement as follows:
 
 > dmux :: Source' (Either a b) -> Sink' a -> Sink' b -> Eff
 > dmux Nil ta tb = fwd Nil ta >> fwd Nil tb
@@ -438,10 +462,22 @@ TODO: nicer definition?
 >   shiftSrc sab' $ \sab ->
 >   dmux sab ta tb
 
+The key ingredient is that demultiplexing starts by reading the next
+value available on the source. Depending on its value, we feed the
+data to either of the sinks are proceed.
+
+
+However, one cannot meanigfully multiplex sources.
+
+> mux0 :: Source' a -> Source' b -> Source' (a & b)
+> mux0 Nil xs = _
+> mux
+
+Indeed, there is no
+
 This is not implementable (without resorting to primitives in the
 IO monad):
 
-mux :: Src a -> Src b -> Src (Either a b)
 
 or even
 muxWith :: Src a -> Src b -> Src (a & b)
@@ -627,5 +663,19 @@ For statuses  things like mouse pos. event, where only the last message matters.
 CoSnk ~ Src ~ ⊗
 CoSrc ~ Snk ~ ⅋
 
-> main = example1
 
+Related Work
+============
+
+
+\citet{bernardy_composable_2015}
+
+
+Future Work
+===========
+
+Beyond Haskell: native support for linear types. Even classical!
+
+
+Conclusion
+==========

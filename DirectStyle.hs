@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 module DirectStyle where
 
-import Organ
+import OrganOld
 import System.IO
 import Control.Concurrent.MVar
 import Control.Concurrent (forkIO)
@@ -78,6 +78,7 @@ dupSnk src (Cons x xs) = src $ Cons x $ \ snk -> case snk of
 
 
 
+
 data Status = Taken | Done
 
 pipe :: NN (Src a, Snk a)
@@ -111,6 +112,28 @@ unzipSnk s (Cons a s1) (Cons b s2) = s (Cons (a,b) (zipSrc s1 s2))
 zipSrc :: Src a -> Src b -> Src (a,b)
 zipSrc s1 s2 Full = s1 Full >> s2 Full
 zipSrc s1 s2 (Cont s) = s1 (Cont (\source1 -> s2 (Cont (\source2 -> unzipSnk s source1 source2))))
+
+unZipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
+unZipSrc sab ta tb = shiftSrc sab $ \sab' ->
+  case sab' of
+    Nil -> tb Nil >> ta Nil
+    Cons (a,b) xs -> ta $ Cons a $ \sa ->
+                     tb $ Cons b $ \sb ->
+                     unZipSrc (fwd sab')
+                              (flip fwd sa)
+                              (flip fwd sb)
+
+
+unZipSrc0 :: Src (a,b) -> Snk a -> Snk b -> Eff
+unZipSrc0 sab ta tb = shiftSrc sab $ \sab' ->
+  case sab' of
+    Nil -> tb Nil >> ta Nil
+    Cons (a,b) xs -> ta $ Cons a $ \sa ->
+                     tb $ Cons b $ \sb ->
+                     unZipSrc (fwd sab')
+                              (flip fwd sa)
+                              (flip fwd sb)
+
 
 mapSrc :: (a -> b) -> Src a -> Src b
 mapSrc f src Full = src Full

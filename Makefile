@@ -8,3 +8,5 @@ all: Organ.pdf
 
 %.pdf: %.tex
 	pdflatex $*
+	bibtex $*
+	pdflatex $*
