@@ -1,1 +1,2 @@
 %format <$>         = "<\!\!\$\!\!> "
+%include forall.fmt

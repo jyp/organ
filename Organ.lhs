@@ -44,6 +44,11 @@ Streams, Continuations, Linear Types
 Introduction
 ============
 
+* Lazy IO Problem (Ref Kiselyov et al.)
+* An actual issue in practice: lazy IO tends to leave files open, etc.
+
+
+
 * Goals
 * Problem
 
@@ -765,11 +770,24 @@ inverted to work on sinks, as follows.
 > swap :: Buffering -> Snk b -> CoSnk b
 > swap f s = f (dnintro' s)
 
+> bufferedDmux :: CoSrc a -> CoSrc a -> Src a
+> bufferedDmux s1 s2 t = do
+>   c <- newChan
+>   forkIO $ forward (chanCoSnk c) s1
+>   forkIO $ forward (chanCoSnk c) s2
+>   chanSrc c t
 
- <!--
-CoSrc ~ Snk ~ ⅋
-CoSrc ~ Snk ~ ⅋
- -->
+> type Client a = (CoSrc a, Snk a)
+
+
+Everything sent to this sink will be sent to both arg. sinks.
+
+> collapseSnk :: Snk a -> Snk a -> Snk a
+> collapseSnk t1 t2 Nil = t1 Nil >> t2 Nil
+> collapseSnk t1 t2 (Cons x xs) = t1 (Cons x $ \c1 -> t2 (Cons x $ \c2 -> shiftSrc xs (collapseSnk (flip fwd c1) (flip fwd c2))))
+
+> server :: Client a -> Client a -> Eff
+> server (i1,o1) (i2,o2) = forward (bufferedDmux i1 i2) (collapseSnk o1 o2)
 
 Application: Stream-Based Parsing
 =================================
@@ -781,6 +799,16 @@ Parsing processes
 > data P s res  =  Sym (Maybe s -> P s res)
 >               |  Fail
 >               |  Result res (P s res)
+
+Another kind of continuations here.
+
+> newtype Parser s a = P (forall res. (a -> P s res) -> P s res)
+
+> instance Monad (Parser s) where
+>   return x  = P $ \fut -> fut x
+>   P f >>= k = P (\fut -> f (\a -> let P g = k a in g fut))
+
+> P p <|> P q = P (\fut -> best (p fut) (q fut))
 
 > best :: P s a -> P s a -> P s a
 > best Fail x = x
@@ -794,28 +822,21 @@ Parsing processes
 >  where
 >   scan :: P s a -> Maybe a -> Snk s
 >   scan (Result res p)  _         xs     = scan p (Just res) xs
->   scan Fail           mres       _      = ret mres
+>   scan Fail           mres       xs     = ret mres >> fwd xs Full
 >   scan (Sym f)        mres       xs     = case xs of
 >     Nil        -> scan (f Nothing) mres Nil
 >     Cons x cs  -> forward cs (scan (f $ Just x) mres)
 
-> results :: forall a s. P s a -> Src s -> Src a
+> results :: P s a -> Src s -> Src a
 > results p0 src snk = shiftSrc src (scan p0 (flip fwd snk))
 >  where
 >   scan :: P s a -> Snk a -> Snk s
 >   scan (Result res p) ret        xs     = ret (Cons res (results p $ fwd xs))
->   scan Fail           ret       _      = ret Nil
+>   scan Fail           ret        xs     = ret Nil >> fwd xs Full
 >   scan (Sym f)        mres       xs     = case xs of
 >     Nil        -> scan (f Nothing) mres Nil
 >     Cons x cs  -> forward cs (scan (f $ Just x) mres)
 
-Another kind of continuations here.
-
-> newtype Parser s a = P (forall res. (a -> P s res) -> P s res)
-
-> instance Monad (Parser s) where
->   return x  = P $ \k -> k x
->   P f >>= k = P (\fut -> f (\a -> let P g = k a in g fut))
 
 
 
@@ -865,6 +886,15 @@ Related Work
 > type Producer m e = GenT e m ()
 > type Consumer m e = e -> m ()
 > type Transducer m1 m2 e1 e2 = Producer m1 e1 -> Producer m2 e2
+
+* FeldSpar modadic streams
+
+TODO: Josef
+
+* Push/Pull
+
+http://www.balisage.net/Proceedings/vol3/html/Kay01/BalisageVol3-Kay01.html#d28172e501
+
 
 Future Work
 ===========
