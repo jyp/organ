@@ -832,12 +832,10 @@ consume CoSrc if you can, Src if you must.
 consume Snk if you can, CoSnk if you must.
 
 
- ---------------------   --------------------------
-         Src                  Snk
-        CoSnk                CoSrc
-   Easy to consume          Easy to produce
-    Try to produce          Try  to consume
- ----------------------   --------------------------
+             Src                  Snk
+            CoSnk                CoSrc
+       Easy to consume          Easy to produce
+        Try to produce          Try  to consume
 
 Table of transparent functions (implementable without reference to IO, preserving syncronicity)
 
