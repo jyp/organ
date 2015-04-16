@@ -2,7 +2,7 @@
 
  <!--
 
-> {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes #-}
+> {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms #-}
 > module Organ where
 > import System.IO
 > import Control.Exception
@@ -149,6 +149,7 @@ We will define sources and sinks by mutual recursion. Producing a
 source means to select if the source is empty (\var{Nil}) or not
 (\var{Cons}). If the source is not empty, one must then produce an
 element and *consume* a sink.
+
 
 > data Source' a = Nil | Cons a (N (Sink' a))
 > data Sink' a = Full | Cont (N (Source' a))
@@ -942,3 +943,20 @@ Conclusion
 The source code for this paper is a literate Haskell file, available
 at this url: TODO. The paper is typeset using pandoc, lhs2TeX and
 latex.
+
+ScratchPad
+==========
+
+
+> data a + b = Inl a | Inr b
+> data One = TT
+> type Church f = forall x. (f x -> x) -> x
+> newtype ChurchSrc' a = CS (forall x. ((One + (a, N (One + N x))) -> x) -> x)
+> type ChurchSnk a = N (ChurchSrc' a)
+> type ChurchSrc a = NN (ChurchSrc' a)
+
+> -- forall x. (One + N (One + (a, N x))) -> x
+
+> emptyCh :: ChurchSrc a
+> emptyCh k = k $ CS $ \k' -> k' (Inl TT)
+
