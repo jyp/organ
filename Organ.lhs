@@ -772,10 +772,9 @@ TODO
 
 Parsing processes
 
-> data P s res
->   = Sym (Maybe s -> P s res) -- ^ look at the next symbol (nothing if eof)
->   | Fail
->   | Result res (P s res)
+> data P s res  =  Sym (Maybe s -> P s res)
+>               |  Fail
+>               |  Result res (P s res)
 
 > best :: P s a -> P s a -> P s a
 > best Fail x = x
@@ -790,6 +789,16 @@ Parsing processes
 >   scan :: P s a -> Maybe a -> Snk s
 >   scan (Result res p)  _         xs     = scan p (Just res) xs
 >   scan Fail           mres       _      = ret mres
+>   scan (Sym f)        mres       xs     = case xs of
+>     Nil        -> scan (f Nothing) mres Nil
+>     Cons x cs  -> forward cs (scan (f $ Just x) mres)
+
+> results :: forall a s. P s a -> Src s -> Src a
+> results p0 src snk = shiftSrc src (scan p0 (flip fwd snk))
+>  where
+>   scan :: P s a -> Snk a -> Snk s
+>   scan (Result res p) ret        xs     = ret (Cons res (results p $ fwd xs))
+>   scan Fail           ret       _      = ret Nil
 >   scan (Sym f)        mres       xs     = case xs of
 >     Nil        -> scan (f Nothing) mres Nil
 >     Cons x cs  -> forward cs (scan (f $ Just x) mres)
