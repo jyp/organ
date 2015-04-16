@@ -4,7 +4,6 @@
 
 > {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes #-}
 > module Organ where
-
 > import System.IO
 > import Control.Exception
 > import Control.Concurrent (forkIO, readChan, writeChan, Chan, newChan)
@@ -44,27 +43,50 @@ Streams, Continuations, Linear Types
 Introduction
 ============
 
+Problem:
 * Lazy IO Problem (Ref Kiselyov et al.)
 * An actual issue in practice: lazy IO tends to leave files open, etc.
 
+TODO: better example?
 
+> main = failure
+> 
+> func = do
+>   input <- hGetContents stdin
+>   writeFile "test1.txt" (unlines $ take 3 $ lines input)
 
-* Goals
-* Problem
+> failure = do
+>   func
+>   func
+
+Contributions.
+
+* Provide a simplified design for coroutine-based IO
+
+* Modularity
+
+* Cast an new light on coroutine-based io by drawing inspiration from
+classical linear logic. Emphasis on polarity and duality.
+
+* In particular, we show that mismatch in duality correspond to
+buffers and control structures, depending on the kind of mismatch.
+
+Approach.
 
 A pipe can be accessed through both ends, explicitly.
 
     Source -->  Program --> Sink
 
+Solution to the example. API?
 
-* Modularity
-* Synchronicity?
 
 The ideas presented in this paper are heavily inspired by study of
 Girards' linear logic \cite{girard_linear_1987}. One way to read this
 paper is as an advocacy for linear types support in Haskell.
 
-Contributions and paper outline.
+Paper outline.
+
+* New design for coroutine-based io
 
 Preliminary: negations and continuations
 ========================================
@@ -369,7 +391,8 @@ A file source reads data from a file, as follows:
 We can then implement file copy as follows:
 
 > copyFile :: FilePath -> FilePath -> Eff
-> copyFile source target = forward (fileSrc source) (fileSnk target)
+> copyFile source target = forward  (fileSrc source)
+>                                   (fileSnk target)
 
 It should be emphasised at this point that reading and writing will be
 interleaved: in order to produce the next file line (in the source),
@@ -383,7 +406,8 @@ early. Instead of connecting the source to a full sink, we connect it
 to one which stops receiving input after three lines.
 
 > read3Lines :: Eff
-> read3Lines = forward (hFileSrc stdin) (takeSnk 3 $ fileSnk "text.txt")
+> read3Lines = forward  (hFileSrc stdin)
+>                       (takeSnk 3 $ fileSnk "text.txt")
 
 Indeed, testing the above program reveals that it properly closes
 stdin after reading three lines. This early closing of sinks allows
@@ -619,7 +643,8 @@ The second example is a co-sink which sends its contents to a file.
 
 > coFileSink :: Handle -> CoSnk String
 > coFileSink h Full = hClose h
-> coFileSink h (Cont c) = c (Cons (hPutStrLn h) (coFileSink h))
+> coFileSink h (Cont c) = c (Cons  (hPutStrLn h)
+>                                  (coFileSink h))
 
 Compared to fileSnk, the difference is that one does not control the
 order of execution of effects. The effect of writing the current line
@@ -767,6 +792,9 @@ inverted to work on sinks, as follows.
 
 > type Buffering = forall a. CoSrc a -> Src a
 
+> swap' :: (Snk a -> Snk a) -> Src a -> Src a
+> swap' f s s' = shiftSrc s (f (flip fwd s'))
+
 > swap :: Buffering -> Snk b -> CoSnk b
 > swap f s = f (dnintro' s)
 
@@ -785,6 +813,9 @@ Everything sent to this sink will be sent to both arg. sinks.
 > collapseSnk :: Snk a -> Snk a -> Snk a
 > collapseSnk t1 t2 Nil = t1 Nil >> t2 Nil
 > collapseSnk t1 t2 (Cons x xs) = t1 (Cons x $ \c1 -> t2 (Cons x $ \c2 -> shiftSrc xs (collapseSnk (flip fwd c1) (flip fwd c2))))
+
+> tee :: Src a -> Snk a -> Src a
+> tee s1 t1 = swap' (collapseSnk t1) s1
 
 > server :: Client a -> Client a -> Eff
 > server (i1,o1) (i2,o2) = forward (bufferedDmux i1 i2) (collapseSnk o1 o2)
