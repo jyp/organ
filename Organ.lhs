@@ -11,8 +11,9 @@
 > import Control.Applicative hiding (empty)
 > import Data.IORef
 > import qualified Control.Concurrent as C
+> import Prelude hiding (tail)
 
- -->
+-->
 
 \begin{abstract}
 We present an alternative paradigm for IO in Haskell.
@@ -243,8 +244,10 @@ forwarding of data from Src to Snk:
 TODO: flow
 
 > dnintro :: Src a -> Src (NN a)
-> dnintro k Full = k Full
-> dnintro s (Cont k) = s $ Cont $ dndel' k
+> dnintro = mapSrc shift
+
+> dndel' :: Snk (NN a) -> Snk a
+> dndel' = mapSnk shift
 
 > dndel :: Src (NN a) -> Src a
 > dndel s Full = s Full
@@ -254,9 +257,6 @@ TODO: flow
 > dnintro' k Nil = k Nil
 > dnintro' k (Cons x xs) = x $ \x' -> k (Cons x' $ dndel xs)
 
-> dndel' :: Snk (NN a) -> Snk a
-> dndel' s Nil = s Nil
-> dndel' s (Cons x xs) = s (Cons (shift x) (dnintro xs))
 
 
 Examples: Effect-Free Streams
@@ -760,6 +760,48 @@ inverted to work on sinks, as follows.
 CoSrc ~ Snk ~ ⅋
 CoSrc ~ Snk ~ ⅋
  -->
+
+Application: Stream-Based Parsing
+=================================
+
+TODO
+
+Parsing processes
+
+> data P s res
+>   = Sym (Maybe s -> P s res) -- ^ look at the next symbol (nothing if eof)
+>   | Fail
+>   | Result res (P s res)
+
+> best :: P s a -> P s a -> P s a
+> best Fail x = x
+> best x Fail = x
+> best (Result res x) y = Result res (best x y)
+> best x (Result res y) = Result res (best x y)
+> best (Sym k1) (Sym k2) = Sym (\s -> best (k1 s) (k2 s))
+
+> longestResultSnk :: forall a s. P s a -> N (Maybe a) -> Snk s
+> longestResultSnk p0 ret = scan p0 Nothing
+>  where
+>   scan :: P s a -> Maybe a -> Snk s
+>   scan (Result res p)  _         xs     = scan p (Just res) xs
+>   scan Fail           mres       _      = ret mres
+>   scan (Sym f)        mres       xs     = case xs of
+>     Nil        -> scan (f Nothing) mres Nil
+>     Cons x cs  -> forward cs (scan (f $ Just x) mres)
+
+Another kind of continuations here.
+
+> newtype Parser s a = P (forall res. (a -> P s res) -> P s res)
+
+> instance Monad (Parser s) where
+>   return x  = P $ \k -> k x
+>   P f >>= k = P (\fut -> f (\a -> let P g = k a in g fut))
+
+Note that making it a co-sink is impossible: the order of symbols is
+critical for a correct parser.
+
+
 
 Summary
 =======
