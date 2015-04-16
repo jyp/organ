@@ -6,8 +6,6 @@
 > module Organ where
 
 > import System.IO
-> import Control.Concurrent.MVar 
-> import Control.Monad (ap)
 > import Control.Exception
 > import Control.Concurrent (forkIO)
 > import Control.Applicative hiding (empty)
@@ -16,21 +14,58 @@
 
  -->
 
- # Intro: Goals and Examples
+\begin{abstract}
+We present an alternative paradigm for IO in Haskell.
+
+- based on continuations
+- linear type-checking helps programmer ensure program correctness
+
+Application: stream processing
+
+- API for allocation-free stream processing
+- with escape hatch
+- making parallelism opportunities explicit
+\end{abstract}
+
+\category{D.1.1}{Applicative (Functional) Programming}{}
+\category{D.3.3}{Language Constructs and Features}{Coroutines}
+
+ <!-- general terms are not compulsory anymore, you may leave them out 
+
+\terms
+term1, term2
+
+ -->
+
+\keywords
+Streams, Continuations, Linear Types
+
+Introduction
+============
+
+* Goals
+* Problem
 
 A pipe can be accessed through both ends, explicitly.
 
-   Source -->  Program --> Sink
+    Source -->  Program --> Sink
 
-Data is sent to a sink, and can be read from a source. The naming
-convention may seem counterintuitive, but it makes sense from the
-point of view of the Producer/Consumer programs using those objects.
 
 * Modularity
 * Synchronicity?
 
+The ideas presented in this paper are heavily inspired by study of
+Girards' linear logic \cite{girard_linear_1987}. One way to read this
+paper is as an advocacy for linear types support in Haskell.
+
+Contributions and paper outline.
+
 Preliminary: negations and continuations
 ========================================
+
+In this section we recall the basics of continuation-based
+programming. Readers familiar with continuations only need to read
+this section to pick up our notation.
 
 We begin by providing a type of effects. For users of the stream
 library, this type should remain abstract. However in this paper we
