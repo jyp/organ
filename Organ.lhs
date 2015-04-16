@@ -363,6 +363,7 @@ A file source reads data from a file, as follows:
 
 We can then implement file copy as follows:
 
+> copyFile :: FilePath -> FilePath -> Eff
 > copyFile source target = forward (fileSrc source) (fileSnk target)
 
 It should be emphasised at this point that reading and writing will be
@@ -376,6 +377,7 @@ The next example shows what happens when a sink closes the stream
 early. Instead of connecting the source to a full sink, we connect it
 to one which stops receiving input after three lines.
 
+> read3Lines :: Eff
 > read3Lines = forward (hFileSrc stdin) (takeSnk 3 $ fileSnk "text.txt")
 
 Indeed, testing the above program reveals that it properly closes
@@ -717,12 +719,13 @@ as a buffering means:
 
 > chanCoSnk :: C.Chan a -> CoSnk a
 > chanCoSnk h Full = return ()
-> chanCoSnk h (Cont c) = c (Cons (C.writeChan h) (chanCoSnk h))
+> chanCoSnk h (Cont c) = c (Cons  (C.writeChan h)
+>                                 (chanCoSnk h))
 
 > chanSrc :: C.Chan a -> Src a
 > chanSrc h Full = return ()
-> chanSrc h (Cont c) = do x <- C.readChan h
->                         c (Cons x $ chanSrc h)
+> chanSrc h (Cont c) = do  x <- C.readChan h
+>                          c (Cons x $ chanSrc h)
 
 > chanBuffer :: CoSrc a -> Src a
 > chanBuffer f g = do
@@ -735,13 +738,14 @@ positions), one may want to ignore all but the latest datum. In this
 case a single memory reference can serve as buffer:
 
 > varCoSnk :: IORef a -> CoSnk a
-> varCoSnk h Full = return ()
-> varCoSnk h (Cont c) = c (Cons (writeIORef h) (varCoSnk h))
+> varCoSnk h Full      = return ()
+> varCoSnk h (Cont c)  = c (Cons  (writeIORef h)
+>                                 (varCoSnk h))
 
 > varSrc :: IORef a -> Src a
 > varSrc h Full = return ()
-> varSrc h (Cont c) = do x <- readIORef h
->                        c (Cons x $ varSrc h)
+> varSrc h (Cont c) = do  x <- readIORef h
+>                         c (Cons x $ varSrc h)
 
 > varBuffer :: a -> CoSrc a -> Src a
 > varBuffer a f g = do
@@ -798,15 +802,15 @@ Another kind of continuations here.
 >   return x  = P $ \k -> k x
 >   P f >>= k = P (\fut -> f (\a -> let P g = k a in g fut))
 
-Note that making it a co-sink is impossible: the order of symbols is
-critical for a correct parser.
+
+
 
 
 
 Summary
 =======
 
-Table of abstract functions (implementable by the user, preserving syncronicity)
+Table of transparent functions (implementable without reference to IO, preserving syncronicity)
 
 Table of primitive functions (implementable by reference to IO, may break syncronicity)
 
