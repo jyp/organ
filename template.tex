@@ -1,26 +1,4 @@
-%-----------------------------------------------------------------------------
-%
-%               Template for sigplanconf LaTeX Class
-%
-% Name:         sigplanconf-template.tex
-%
-% Purpose:      A template for sigplanconf.cls, which is a LaTeX 2e class
-%               file for SIGPLAN conference proceedings.
-%
-% Guide:        Refer to "Author's Guide to the ACM SIGPLAN Class,"
-%               sigplanconf-guide.pdf
-%
-% Author:       Paul C. Anagnostopoulos
-%               Windfall Software
-%               978 371-2316
-%               paul@windfall.com
-%
-% Created:      15 February 2005
-%
-%-----------------------------------------------------------------------------
-
-
-\documentclass{PaperTools/latex/sigplanconf}
+\documentclass[preprint]{PaperTools/latex/sigplanconf}
 
 % The following \documentclass options may be useful:
 
@@ -32,6 +10,7 @@
 \usepackage{amsmath}
 \usepackage{cmll}
 %include polycode.fmt
+%include local.fmt
 \newcommand\var[1]{\ensuremath{\Varid{#1}}}
 \newcommand\HREF[2]{\href{#2}{#1}}
 \input{PaperTools/latex/unicodedefs}
@@ -58,8 +37,8 @@
                                   % (paid open-access papers, 
                                   % short abstracts)
 
-\titlebanner{banner above paper title}        % These are ignored unless
-\preprintfooter{short description of paper}   % 'preprint' option specified.
+\titlebanner{Draft: do not distribute}        % These are ignored unless
+\preprintfooter{Sumitted to Haskell 2015}   % 'preprint' option specified.
 
 \title{$title$}
 $if(subtitle)$
@@ -67,7 +46,7 @@ $if(subtitle)$
 $endif$
 
 \authorinfo{Jean-Philippe Bernardy\and Josef Svennigsson}
-           {Chalmers University of Technology}
+           {Chalmers University of Technology and University of Gothenburg}
            {bernardy,josefs at chalmers.se}
 
 \maketitle

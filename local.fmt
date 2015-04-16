@@ -1,4 +1,1 @@
-%include lhs2TeX.fmt
-\usepackage{cmll}
-\input{PaperTools/latex/unicodedefs}
-\newcommand\var[1]{\ensuremath{\Varid{#1}}}
+%format <$>         = "<\!\!\$\!\!> "

@@ -402,8 +402,8 @@ reading a line in a file source.
 >          hClose h
 >          c Nil
 >        else do
->          mx <- catch (Just <$> hGetLine h)
->                (\(_ :: IOException) -> return Nothing)
+>          mx <- catch  (Just <$> hGetLine h)
+>                       (\(_ :: IOException) -> return Nothing)
 >          case mx of
 >            Nothing -> c Nil
 >            Just x -> c (Cons x $ hFileSrcSafe h)
@@ -772,12 +772,10 @@ Related Work
 ============
 
 
-\citet{bernardy_composable_2015}
-
-"Conduits"
-
-"Pipes"
-
+* \citet{bernardy_composable_2015}
+* "Conduits"
+* "Pipes"
+* Iteratees
 
 Future Work
 ===========
