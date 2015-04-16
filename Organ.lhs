@@ -7,10 +7,9 @@
 
 > import System.IO
 > import Control.Exception
-> import Control.Concurrent (forkIO)
+> import Control.Concurrent (forkIO, readChan, writeChan, Chan, newChan)
 > import Control.Applicative hiding (empty)
 > import Data.IORef
-> import qualified Control.Concurrent as C
 > import Prelude hiding (tail)
 
 -->
@@ -424,10 +423,10 @@ Sources are functors, while sinks are contravariant functors:
 The implementation follows the pattern introduced above: mapSrc and
 mapSnk are defined by mutual recursion.
 
-> mapSrc f src Full = src Full
+> mapSrc _ src Full = src Full
 > mapSrc f src (Cont s) = src (Cont (mapSnk f s))
 
-> mapSnk f snk Nil = snk Nil
+> mapSnk _ snk Nil = snk Nil
 > mapSnk f snk (Cons a s) = snk (Cons (f a) (mapSrc f s))
 
 
@@ -675,7 +674,9 @@ consumptions/productions elementwise.
 > sequentially (Cons _ xs) Nil = xs Full
 > sequentially (Cons x xs) (Cons x' xs') = do
 >   x' x
->   xs (Cont $ \sa -> xs' $ Cont $ \sna -> sequentially sa sna)
+>   (shiftSrc xs  $ \sa ->
+>    shiftSrc xs' $ \sna ->
+>    sequentially sa sna)
 
 Another possible strategy is concurrent execution. This strategy is
 useful if one expects production or consumption of elements to be
@@ -685,8 +686,10 @@ expensive and distributable over computation units.
 > concurrently Nil (Cons _ xs) = xs Full
 > concurrently (Cons _ xs) Nil = xs Full
 > concurrently (Cons x xs) (Cons x' xs') = do
->   C.forkIO $ x' x
->   xs (Cont $ \sa -> xs' $ Cont $ \sna -> concurrently sa sna)
+>   forkIO $ x' x
+>   (shiftSrc xs  $ \sa ->
+>    shiftSrc xs' $ \sna ->
+>    concurrently sa sna)
 
 The above implementation naively spawns a thread for every element,
 but in reality one will most likely want to divide the stream into
@@ -717,19 +720,19 @@ and reach an end of file prematurely. Thus the temporary file should
 be a UNIX pipe. Yet, one may prefer to use Concurrent Haskell channels
 as a buffering means:
 
-> chanCoSnk :: C.Chan a -> CoSnk a
+> chanCoSnk :: Chan a -> CoSnk a
 > chanCoSnk h Full = return ()
-> chanCoSnk h (Cont c) = c (Cons  (C.writeChan h)
+> chanCoSnk h (Cont c) = c (Cons  (writeChan h)
 >                                 (chanCoSnk h))
 
-> chanSrc :: C.Chan a -> Src a
+> chanSrc :: Chan a -> Src a
 > chanSrc h Full = return ()
-> chanSrc h (Cont c) = do  x <- C.readChan h
+> chanSrc h (Cont c) = do  x <- readChan h
 >                          c (Cons x $ chanSrc h)
 
 > chanBuffer :: CoSrc a -> Src a
 > chanBuffer f g = do
->   c <- C.newChan
+>   c <- newChan
 >   forkIO $ forward (chanCoSnk c) f 
 >   chanSrc c g
 
