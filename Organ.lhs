@@ -11,6 +11,7 @@
 > import Control.Applicative hiding (empty)
 > import Data.IORef
 > import Prelude hiding (tail)
+> import Control.Monad.Reader
 
 -->
 
@@ -287,8 +288,8 @@ data. We could write the following:
 > match :: Eff -> (a -> Snk a) -> Snk a
 > match nil' cons' k = await k nil' cons'
 
-However, calling await may break linearity, so we'll refrain to use
-match in the following.
+However, calling await may break linearity, so we will refrain to use
+\var{match} in the following.
 
 
 Furthermore, both Src and Snk are functors and monads. The instances
@@ -733,7 +734,7 @@ as a buffering means:
 > chanBuffer :: CoSrc a -> Src a
 > chanBuffer f g = do
 >   c <- newChan
->   forkIO $ forward (chanCoSnk c) f 
+>   forkIO $ forward (chanCoSnk c) f
 >   chanSrc c g
 
 In certain situations (for example for a stream yielding mouse
@@ -759,7 +760,9 @@ case a single memory reference can serve as buffer:
 All the above bufferings work on sources, but they can be generically
 inverted to work on sinks, as follows.
 
-> swap :: (forall a. CoSrc a -> Src a) -> Snk b -> CoSnk b
+> type Buffering = forall a. CoSrc a -> Src a
+
+> swap :: Buffering -> Snk b -> CoSnk b
 > swap f s = f (dnintro' s)
 
 
@@ -822,6 +825,20 @@ Another kind of continuations here.
 Summary
 =======
 
+produce Src if you can, CoSrc if you must.
+produce CoSnk if you can, Snk if you must.
+
+consume CoSrc if you can, Src if you must.
+consume Snk if you can, CoSnk if you must.
+
+
+ ---------------------   --------------------------
+         Src                  Snk
+        CoSnk                CoSrc
+   Easy to consume          Easy to produce
+    Try to produce          Try  to consume
+ ----------------------   --------------------------
+
 Table of transparent functions (implementable without reference to IO, preserving syncronicity)
 
 Table of primitive functions (implementable by reference to IO, may break syncronicity)
@@ -833,7 +850,23 @@ Related Work
 * \citet{bernardy_composable_2015}
 * "Conduits"
 * "Pipes"
-* Iteratees
+
+* Iteratees \cite{kiselyov_iteratees_2012}
+
+> type ErrMsg = String
+> data Stream el = EOF (Maybe ErrMsg) | Chunk [el]
+> 
+> data Iteratee el m a = IE_done a
+>                           | IE_cont (Maybe ErrMsg)
+>                                     (Stream el -> m (Iteratee el m a, Stream el))
+
+*  \cite{kiselyov_lazy_2012}
+
+> type GenT e m = ReaderT (e -> m ()) m
+> --   GenT e m a  = (e -> m ()) -> m a
+> type Producer m e = GenT e m ()
+> type Consumer m e = e -> m ()
+> type Transducer m1 m2 e1 e2 = Producer m1 e1 -> Producer m2 e2
 
 Future Work
 ===========
@@ -843,3 +876,10 @@ Beyond Haskell: native support for linear types. Even classical!
 
 Conclusion
 ==========
+
+
+\acks
+
+The source code for this paper is a literate Haskell file, available
+at this url: TODO. The paper is typeset using pandoc, lhs2TeX and
+latex.
