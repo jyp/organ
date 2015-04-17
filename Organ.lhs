@@ -43,11 +43,25 @@ Streams, Continuations, Linear Types
 Introduction
 ============
 
-Problem:
-* Lazy IO Problem (Ref Kiselyov et al.)
-* An actual issue in practice: lazy IO tends to leave files open, etc.
+As Hughes famously noted, the stength of functional programming
+languages lie in the composition mechanisms that they provide. That
+is, simple components can be built and understood in isolation; one
+does not need to worry about interference effects when composing
+them. In particular, lazy evaluation affords to contruct complex
+programs by pipelining simple list transformation functions. One can
+already do this (naively) using strict evaluation, however in this
+case each of the steps will need to allocate a complete list to store
+each intermediate result.
 
-TODO: better example?
+Unfortunately, lazy evaluation suffers from two drawbacks. First, it
+does not extend nicely to effectful processing. That is, if (say) an
+input list is produced by reading a file, one is exposed to losing
+referential transparency (as Kiselyov has shown). In practice, lazy IO
+means that it is hard to control when resources will be freed. In
+particular, exception handling is hard to get right. All this means
+that the compositionality principle cherished and touted by Hughes is
+lost.
+
 
 > main = failure
 > 
@@ -59,17 +73,30 @@ TODO: better example?
 >   func
 >   func
 
-Contributions.
+The second issue with lazy evaluation is its memory behaviour. When
+composing list-processing functions f and g, one always hopes that the
+intermediate list will not be allocated. Unfortunately, this does not
+necessarily happen. Indeed, the production pattern of g must match the
+consumption pattern of f, otherwise buffering must occur. In practice,
+this means that a seemingly innocuous change in either of the function
+definitions may drastically change the memory behaviour of the
+composition. Again, the compositionality principle breaks down (if one
+cares about memory behaviour).
 
-* Provide a simplified design for coroutine-based IO
+In this paper, we propose to tackle both of these problems, by means
+of a new representation for streams of data, and a convention on how
+to use streams. The convention to respect is linearity. In fact, the
+ideas presented in this paper are heavily inspired by study of
+Girards' linear logic \cite{girard_linear_1987}, and one way to read
+this paper is as an advocacy for linear types support in Haskell.
 
-* Modularity
-
-* Cast an new light on coroutine-based io by drawing inspiration from
-classical linear logic. Emphasis on polarity and duality.
-
-* In particular, we show that mismatch in duality correspond to
-buffers and control structures, depending on the kind of mismatch.
+The contribution of this paper is a novel approach to coroutine-based
+IO, as well as a Haskell library built on this approach. This library
+supports the compositionality principle as outlined above.  Thanks to
+the linearity convention, its design is more lightweight than exising
+co-routines based libraries. Another novel aspect is that our library
+also supports explicit buffering and control structures, while still
+respecting compositionality.
 
 Approach.
 
@@ -79,10 +106,6 @@ A pipe can be accessed through both ends, explicitly.
 
 Solution to the example. API?
 
-
-The ideas presented in this paper are heavily inspired by study of
-Girards' linear logic \cite{girard_linear_1987}. One way to read this
-paper is as an advocacy for linear types support in Haskell.
 
 Paper outline.
 
@@ -936,6 +959,13 @@ Beyond Haskell: native support for linear types. Even classical!
 
 Conclusion
 ==========
+
+* In particular, we show that mismatch in duality correspond to
+buffers and control structures, depending on the kind of mismatch.
+
+
+* Cast an new light on coroutine-based io by drawing inspiration from
+classical linear logic. Emphasis on polarity and duality.
 
 
 \acks
