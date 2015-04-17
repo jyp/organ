@@ -10,7 +10,6 @@
 > import Control.Applicative hiding (empty)
 > import Data.IORef
 > import Prelude hiding (tail)
-> import Control.Monad.Reader
 
 -->
 
@@ -62,6 +61,7 @@ particular, exception handling is hard to get right. All this means
 that the compositionality principle cherished and touted by Hughes is
 lost.
 
+TODO: on this simple program it's not clear when (or if) the input stream is going to be closed.
 
 > main = failure
 > 
@@ -90,6 +90,21 @@ ideas presented in this paper are heavily inspired by study of
 Girards' linear logic \cite{girard_linear_1987}, and one way to read
 this paper is as an advocacy for linear types support in Haskell.
 
+First. TODO
+
+Second.
+Using our solution, the composition of two stream processors is
+guaranteed not to allocate more memory than the sum of its components.
+If the stream behaviours do not match, the types will not match
+either. It will however be possible to add explicit buffering, which
+will adjust the types:
+
+\begin{spec} h = f . buffer . g \end{spec}
+
+
+
+Contributions and Paper outline.
+
 The contribution of this paper is a novel approach to coroutine-based
 IO, as well as a Haskell library built on this approach. This library
 supports the compositionality principle as outlined above.  Thanks to
@@ -98,18 +113,6 @@ co-routines based libraries. Another novel aspect is that our library
 also supports explicit buffering and control structures, while still
 respecting compositionality.
 
-Approach.
-
-A pipe can be accessed through both ends, explicitly.
-
-    Source -->  Program --> Sink
-
-Solution to the example. API?
-
-
-Paper outline.
-
-* New design for coroutine-based io
 
 Preliminary: negations and continuations
 ========================================
@@ -167,6 +170,13 @@ central role in our approach.
 
 Streams
 =======
+
+Approach.
+
+A pipe can be accessed through both ends, explicitly.
+
+    Source -->  Program --> Sink
+
 
 We will define sources and sinks by mutual recursion. Producing a
 source means to select if the source is empty (\var{Nil}) or not
@@ -921,7 +931,6 @@ Related Work
 ============
 
 
-* \citet{bernardy_composable_2015}
 * "Conduits"
 * "Pipes"
 
@@ -936,11 +945,13 @@ Related Work
 
 *  \cite{kiselyov_lazy_2012}
 
-> type GenT e m = ReaderT (e -> m ()) m
-> --   GenT e m a  = (e -> m ()) -> m a
-> type Producer m e = GenT e m ()
-> type Consumer m e = e -> m ()
-> type Transducer m1 m2 e1 e2 = Producer m1 e1 -> Producer m2 e2
+\begin{spec}
+type GenT e m = ReaderT (e -> m ()) m
+--   GenT e m a  = (e -> m ()) -> m a
+type Producer m e = GenT e m ()
+type Consumer m e = e -> m ()
+type Transducer m1 m2 e1 e2 = Producer m1 e1 -> Producer m2 e2
+\end{spec}
 
 * FeldSpar modadic streams
 
@@ -948,7 +959,22 @@ TODO: Josef
 
 * Push/Pull
 
-http://www.balisage.net/Proceedings/vol3/html/Kay01/BalisageVol3-Kay01.html#d28172e501
+\citet{bernardy_composable_2015}
+
+push arrays paper
+
+but idea can be traced back to Jackson 75
+
+via http://www.balisage.net/Proceedings/vol3/html/Kay01/BalisageVol3-Kay01.html#d28172e501
+
+* Linear Types
+
+Wadler 12, Pfenning and Caires.
+
+Stream is the direct translation of a linear type for a stream protocol:
+
+Source a = 1 ⊕ (a ⊗ (Sink a)^⊥)
+Sink a = 1 ⊕ (Source a)^⊥
 
 
 Future Work
