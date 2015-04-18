@@ -42,24 +42,27 @@ Streams, Continuations, Linear Types
 Introduction
 ============
 
-As Hughes famously noted, the stength of functional programming
-languages lie in the composition mechanisms that they provide. That
-is, simple components can be built and understood in isolation; one
-does not need to worry about interference effects when composing
-them. In particular, lazy evaluation affords to contruct complex
-programs by pipelining simple list transformation functions. One can
-already do this (naively) using strict evaluation, however in this
-case each of the steps will need to allocate a complete list to store
-each intermediate result.
+As \citet{hughes_functional_1989} famously noted, the stength of
+functional programming languages lie in the composition mechanisms
+that they provide. That is, simple components can be built and
+understood in isolation; one does not need to worry about interference
+effects when composing them. In particular, lazy evaluation affords to
+contruct complex programs by pipelining simple list transformation
+functions. Indeed, strict evaluation forces to fully reify each
+intermediate result between each computational step, while lazy
+evaluation allows to run all the computations concurrently, often
+without ever allocating a single intermediate result in full.
 
 Unfortunately, lazy evaluation suffers from two drawbacks. First, it
 does not extend nicely to effectful processing. That is, if (say) an
-input list is produced by reading a file, one is exposed to losing
-referential transparency (as Kiselyov has shown). In practice, lazy IO
-means that it is hard to control when resources will be freed. In
-particular, exception handling is hard to get right. All this means
-that the compositionality principle cherished and touted by Hughes is
-lost.
+input list is produced by reading a file lazily, one is exposed to
+losing referential transparency (as Kiselyov has shown). In practice,
+when using lazy IO, the point when a resource will be released depends
+on what happens in the context.
+
+(In particular, exception handling is hard to get right.) 
+This context-dependency means that the compositionality principle cherished and touted by
+Hughes is lost.
 
 TODO: on this simple program it's not clear when (or if) the input stream is going to be closed.
 
@@ -102,17 +105,22 @@ will adjust the types:
 \begin{spec} h = f . buffer . g \end{spec}
 
 
+The contributions of this paper are
 
-Contributions and Paper outline.
+* a re-interpretation of coroutine-based effectful computing, based on
+a computational interpretation of linear logic, and
 
-The contribution of this paper is a novel approach to coroutine-based
-IO, as well as a Haskell library built on this approach. This library
-supports the compositionality principle as outlined above.  Thanks to
-the linearity convention, its design is more lightweight than exising
-co-routines based libraries. Another novel aspect is that our library
-also supports explicit buffering and control structures, while still
+* a Haskell library built on this approach. Besides supporting the
+compositionality principle as outlined above, it features two novel
+aspects:
+
+1. A more lightweight design than state-of-the-art co-routine based
+libraries, affored by the linearity convention.
+
+2. Support ofor explicit buffering and control structures, while still
 respecting compositionality.
 
+TODO: outline
 
 Preliminary: negations and continuations
 ========================================
@@ -146,8 +154,8 @@ In classical logics, negation is involutive; that is:
 
 $NN a = a$
 
-However, because we work with Haskell, we do not have this
-equality. We can come close however.
+However, because we work with an intuitionistic language (Haskell), we
+do not have this equality.  However, we can come close enough.
 
 First, double negations can always be introduced, using the
 \var{shift} operator.
@@ -155,80 +163,97 @@ First, double negations can always be introduced, using the
 > shift :: a -> NN a
 > shift x k = k x
 
-Second, it is possible to remove double negations, as long as a
-side-effect can be outputted.  Equivalently, triple negations can be
-collapsed to a single one.
+Second, it is possible to remove double negations, but only if an
+effect can be outputted.  Equivalently, triple negations can be
+collapsed to a single one:
 
-> unshift :: NN (N a) -> N a
+> unshift :: N (NN a) -> N a
 > unshift k x = k (shift x)
 
 The above two functions are the \var{return} and \var{join} of the
 double negation monad. However, we will not be using this monadic
 structure anywhere in the following. Indeed, single negations play a
-central role in our approach.
+central role in our approach, and the monadic struture is a mere
+diversion.
 
 
 Streams
 =======
 
-Approach.
+As it should be clear by now, we embrace the principle of
+duality. This approach is refected in the design of the streaming
+library: we will not only have a type for sources of data but also a
+type for sinks. For example, a simple stream processor reading from a
+single source and writing to a single sink will be given the following
+type:
 
-A pipe can be accessed through both ends, explicitly.
+\begin{spec}
+simple :: Source a -> Sink a -> Eff
+\end{spec}
 
-    Source -->  Program --> Sink
+We will make sure that Sink is the negation of a source (and vice
+versa), and thus the type of the above program may equivalently have
+been written as follows:
 
+\begin{spec}
+simple :: Source a -> Source a
+\end{spec}
+
+However, having explicit access to sinks allows us to (for example)
+dispatch a single source to mulitiple sinks. The presence of both
+types will also make us familiar with duality, which will be crucial
+in the later sections.
 
 We will define sources and sinks by mutual recursion. Producing a
-source means to select if the source is empty (\var{Nil}) or not
-(\var{Cons}). If the source is not empty, one must then produce an
-element and *consume* a sink.
+source means to select if there we are out of data (\var{Nil}) or some
+more is available (\var{Cons}). If there is data, one must
+then produce a data item and *consume* a sink.
 
 
-> data Source' a = Nil | Cons a (N (Sink' a))
-> data Sink' a = Full | Cont (N (Source' a))
+> data Source' a   = Nil   | Cons a  (N (Sink' a))
+> data Sink' a     = Full  | Cont    (N (Source' a))
 
 Producing a sink means to select if one an accept more elements
 (\var{Cont}) or not (\var{Full}). In the former case, one must then be
-able to consume a source. The full case is useful for example when the
-sink encounters an exception.
+able to consume a source. The \var{Full} case is useful when the sink
+closes early, for example when it encounters an exception.
 
 Note that, in order to produce (or consume) the next element, the
-source (or sink) must run the effects on the other side of the pipe.
-
-This means that each production is matched by a consumption, and
-\textit{vice versa}.
+source (or sink) must handle the effects generated by the other side
+of the stream before proceeding. This means that each production is
+matched by a consumption, and \textit{vice versa}.
 
 Linearity
 ---------
 
-For streams to be used safely, we must have the following extra
-contract between the user and the implementer: **each \var{Eff}-valued
-variable must be used linearly**. That is, assuming $x$ an \var{Eff}-valued
-variable:
+For streams to be used safely, one cannot discard nor duplicate them,
+for otherwise effects may be discarded and duplicated, which is
+dangerous.  Indeed, the same file could be closed twice, or not at
+all.  For example, the last action of a sink will typically be closing
+the file. This can be guaranteed only if the actions are run until
+reaching the end of the pipe (either \var{Full} or \var{Nil}).
 
-1. The variable $x$ may not be duplicated or shared. In particular, if
-passed as an argument to a function it may not be used again.
+We first define an effectful type as a type which mentions \var{Eff}
+in its definition. We say that a variable with an effectful type is
+itself effectful.
 
-2. The variable $x$ must be consumed (or passed to a function, which
+The linearity convention is then respected iff:
+
+1. No effectful variable may not be duplicated or shared. In
+particular, if passed as an argument to a function it may not be used
+again.
+
+2. Every effectful variable must be consumed (or passed to a function, which
 will be in charged of consuming it).
 
-
-If the above condition is not respected, the effects contained in the
-objects may be run multiple times; and this can be bad! For example,
-the same file may be closed twice, etc. (Missiles ... ) or we may
-forget to run an effect
+3. A type variable α can be instanciated to an effectful type only α
+it occurs in an effecful type. (For example it is ok to construct
+Source (Source a), because Source is already effectful).
 
 
-For example, the last action of a
-sink will typically be closing the file. This can be guaranteed only
-if the actions are run until reaching the end of the pipe (either
-\var{Full} or \var{Nil}).
-
-In this paper, linearity is enforced by manual inspection. Doing so is
-error prone; fortunately implementing a linearity checker is
-straightforward. (TODO: if type variables can be instanciated by Eff
-things it's a bit tricky. (Need for two kinds of variables...) We do
-this instanciation in the concat function.)
+In this paper, the linearity convention is enforced by manual
+inspection. Manual inspection is unreliable, but fortunately
+implementing a linearity checker is straightforward.
 
 
 Basics
@@ -236,15 +261,16 @@ Basics
 
 A few basic combinators for Source' and Sink' are the following.
 
-One can connect a source and a sink, as follows. The effect is the
-combined effect of all productions and consumptions on the stream.
+One can forward the data from a source to a sink, as follows. The
+effect generated by this operation is the combined effect of all
+productions and consumptions on the stream.
 
 > fwd :: Source' a -> Sink' a -> Eff
 > fwd s (Cont s') = s' s
 > fwd Nil Full = return ()
 > fwd (Cons _ xs) Full = xs Full
 
-One send data to a sink. If the sink is full, the da"ta is ignored.
+One can send data to a sink. If the sink is full, the data is ignored.
 The third argument is a continuation getting the "new" sink, that
 obtained after the "old" sink has consumed the data.
 
