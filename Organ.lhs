@@ -995,7 +995,21 @@ type Transducer m1 m2 e1 e2 = Producer m1 e1 -> Producer m2 e2
 
 * FeldSpar modadic streams
 
-TODO: Josef
+Feldspar, a DSL for digital signal processing, has a notion of streams
+built on monads \citet{svenningsson15:monadic_streams}. In Haskell
+the stream type can be written as follows:
+
+> type Stream a = IO (IO a)
+
+Intuitively the outer monad can be understood as performing
+initialization which creates the inner monadic computation. The inner
+computation is called iteratively to produce the elements of the
+stream.
+
+Compared to the representation in the present paper, the monadic
+streams only has one form of stream, corresponding to a source. Also,
+there is no support for timely release of resources, such things need
+to be dealt with outside of the stream framework.
 
 * Push/Pull
 
