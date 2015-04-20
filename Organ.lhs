@@ -78,7 +78,7 @@ down.
 Second, lazy evaluation does not extend nicely to effectful
 processing. That is, if (say) an input list is produced by reading a
 file lazily, one is exposed to losing referential transparency (as
-Kiselyov {TODO cite} has shown). For example, one may rightfully
+\citet{kiselyov_lazy_2013} has shown). For example, one may rightfully
 expect\footnote{This expectation is expressed in a
 Stack Overflow question, accessible at this URL:
 http://stackoverflow.com/questions/296792/haskell-io-and-closing-files
@@ -465,12 +465,10 @@ A file source reads data from a file, as follows:
 > hFileSrc h Full = hClose h
 > hFileSrc h (Cont c) = do
 >   e <- hIsEOF h
->   if e then do
->          hClose h
->          c Nil
->        else do
->          x <- hGetLine h
->          c (Cons x $ hFileSrc h)
+>   if e   then   do  hClose h
+>                     c Nil
+>          else   do  x <- hGetLine h
+>                     c (Cons x $ hFileSrc h)
 
 > fileSrc :: FilePath -> Src String
 > fileSrc file sink = do
@@ -530,6 +528,11 @@ reading a line in a file source.
 
 Exceptions raised in hIsEOF should be handled in a similar same way,
 as well as those raised in a file sink.
+
+In an industrial-strength implementation, one would probably have a
+field in both the Nil and Full constructors indicating the nature of
+the exception encountered, but we will not bother in this proof of
+concept implementation.
 
 Algebraic structure
 -------------------
@@ -979,19 +982,20 @@ The monading interface can then be built using shift and unshift:
 
 The essential parsing ingredient, disjunction, rests on the
 possibility to weave processes together, always picking that which
-fails last:
+fails as last resort:
 
 > weave :: P s a -> P s a -> P s a
 > weave Fail x = x
 > weave x Fail = x
 > weave (Result res x) y = Result res (weave x y)
 > weave x (Result res y) = Result res (weave x y)
-> weave (Sym k1) (Sym k2) = Sym (\s -> weave (k1 s) (k2 s))
+> weave (Sym k1) (Sym k2)
+>     = Sym (\s -> weave (k1 s) (k2 s))
 
 > P p <|> P q = P (\fut -> weave (p fut) (q fut))
 
 
-  <--
+ <!--
 
 > longestResultSnk :: forall a s. P s a -> N (Maybe a) -> Snk s
 > longestResultSnk p0 ret = scan p0 Nothing
@@ -1007,7 +1011,8 @@ fails last:
 
 Parsing then reconciles the execution of the process with the
 traversal of the source. In particular, whenever a result is
-encountered, it is fed to the sink.
+encountered, it is fed to the sink. If the parser fails, both ends of
+the stream are closed.
 
 > parse :: forall s a. Parser s a -> Src s -> Src a
 > parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x Fail
@@ -1148,14 +1153,41 @@ Related Work
 ============
 
 
+Polarities, data structures and control
+---------------------------------------
+
+One of keys ideas formalized in this paper is to classify streams by
+polarity. The negative polarity (Sinks, CoSrc) controls the execution
+thread, whereas the positive one (Sources, Co-sinks) provide
+data. This idea has recently been taken advantage of this idea to
+bring efficient array programming facilities to functional programming
+\citep{bernardy_composable_2015}.  TODO: josef: other citations
+
+This concept is central in the literature on Girard's linear logic
+(\citep{laurent_etude_2002,zeilberger_logical_2009}). However, in the
+case of streams, this idea dates back at least to
+\citet{jackson_principles_1975} (\citet{kay_you_2008} gives a good
+summary of Jacksons' insight).
+
+Our contribution is to bring this idea to stream programming in
+Haskell. (While duality was used for Haskell array programming, it has
+not been taken advantage for stream programming.) We belive that our
+implementation brings together the practical applications that Jackson
+intended, while being faithful to the theoretical foundations in
+logic, via the double-negation embedding.
+
+
 * "Conduits"
+
+
 * "Pipes"
+
 
 * Iteratees \cite{kiselyov_iteratees_2012}
 
 > type ErrMsg = String
 > data Stream el = EOF (Maybe ErrMsg) | Chunk [el]
-> 
+
 > data Iteratee el m a = IE_done a
 >                           | IE_cont (Maybe ErrMsg)
 >                                     (Stream el -> m (Iteratee el m a, Stream el))
@@ -1196,17 +1228,12 @@ streams only has one form of stream, corresponding to a source. Also,
 there is no support for timely release of resources, such things need
 to be dealt with outside of the stream framework.
 
-* Push/Pull
-
-\citet{bernardy_composable_2015}
-
-push arrays paper
-
-but idea can be traced back to Jackson 75
-
-via http://www.balisage.net/Proceedings/vol3/html/Kay01/BalisageVol3-Kay01.html#d28172e501
-
 * Linear Types
+
+The main choice which enables us to simplify the interface for our
+stream library is the linearity convention.
+
+
 
 Wadler 12, Pfenning and Caires.
 
@@ -1250,6 +1277,17 @@ The source code for this paper is a literate Haskell file, available
 at this url: TODO. The paper is typeset using pandoc, lhs2TeX and
 latex.
 
+
+
+\bibliographystyle{abbrvnat}
+\bibliography{PaperTools/bibtex/jp,js}
+
+
+\appendix
+\section{Appendix: implementation details}
+
+
+
 ScratchPad
 ==========
 
@@ -1261,10 +1299,10 @@ ScratchPad
 > type ChurchSnk a = N (ChurchSrc' a)
 > type ChurchSrc a = NN (ChurchSrc' a)
 
-> -- forall x. (One + N (One + (a, N x))) -> x
 
 > emptyCh :: ChurchSrc a
 > emptyCh k = k $ CS $ \k' -> k' (Inl TT)
+
 
 TODO: on this simple program it's not clear when (or if) the input stream is going to be closed.
 
@@ -1276,4 +1314,3 @@ TODO: on this simple program it's not clear when (or if) the input stream is goi
 > failure = do
 >   func
 >   func
-
