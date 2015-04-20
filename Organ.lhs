@@ -968,47 +968,29 @@ consume Snk if you can, CoSnk if you must.
 Table of transparent functions (implementable without reference to IO, preserving syncronicity)
 
 
-
-> unzipSnk :: Snk (a,b) -> Source' a -> Source' b -> Eff
-> unzipSnk s Nil (Cons _ s') = s' Full >> s Nil
-> unzipSnk s (Cons _ s') Nil = s' Full >> s Nil
-> unzipSnk s (Cons a s1) (Cons b s2) = s (Cons (a,b) (zipSrc s1 s2))
-> 
 > zipSrc :: Src a -> Src b -> Src (a,b)
-> zipSrc s1 s2 Full = s1 Full >> s2 Full
-> zipSrc s1 s2 (Cont s) = s1 (Cont (\source1 -> s2 (Cont (\source2 -> unzipSnk s source1 source2))))
-> 
-> unZipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
-> unZipSrc sab ta tb = shiftSrc sab $ \sab' ->
->   case sab' of
->     Nil -> tb Nil >> ta Nil
->     Cons (a,b) xs -> ta $ Cons a $ \sa ->
->                      tb $ Cons b $ \sb ->
->                      unZipSrc (fwd sab')
->                               (flip fwd sa)
->                               (flip fwd sb)
-> 
-> 
-> unZipSrc0 :: Src (a,b) -> Snk a -> Snk b -> Eff
-> unZipSrc0 sab ta tb = shiftSrc sab $ \sab' ->
->   case sab' of
->     Nil -> tb Nil >> ta Nil
->     Cons (a,b) xs -> ta $ Cons a $ \sa ->
->                      tb $ Cons b $ \sb ->
->                      unZipSrc (fwd sab')
->                               (flip fwd sa)
->                               (flip fwd sb)
-> 
-> unZipSnk0 :: Snk (a,b) -> Src a -> Src b -> Eff
-> unZipSnk0 sab ta tb =
+> zipSrc s1 s2 = unshiftSrc (\t -> unzipSnk t s1 s2)
+
+> unzipSnk :: Snk (a,b) -> Src a -> Src b -> Eff
+> unzipSnk sab ta tb =
 >   shiftSrc ta $ \ta' ->
 >   case ta' of
 >     Nil -> tb Full >> sab Nil
 >     Cons a as ->  shiftSrc tb $ \tb' ->  case tb' of
 >       Nil -> as Full >> sab Nil
->       Cons b bs -> sab (Cons (a,b) $ \sab' -> unZipSnk0 (flip fwd sab') as bs)
->  
-> 
+>       Cons b bs -> forward (cons (a,b) $ zipSrc as bs) sab
+
+> unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
+> unzipSrc sab ta tb = shiftSrc sab $ \sab' ->
+>   case sab' of
+>     Nil -> tb Nil >> ta Nil
+>     Cons (a,b) xs -> ta $ Cons a $ \sa ->
+>                      tb $ Cons b $ \sb ->
+>                      unzipSrc xs
+>                               (flip fwd sa)
+>                               (flip fwd sb)
+ 
+
 > zipSnk :: Snk a -> Snk b -> Snk (a,b)
 > zipSnk sa sb Nil = sa Nil >> sb Nil
 > zipSnk sa sb (Cons (a,b) tab) = sa $ Cons a $ \sa' ->
