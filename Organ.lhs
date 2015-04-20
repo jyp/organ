@@ -863,11 +863,11 @@ inverted to work on sinks, as follows.
 
 > type Buffering = forall a. CoSrc a -> Src a
 
-> swap' :: (Snk a -> Snk a) -> Src a -> Src a
-> swap' f s s' = shiftSrc s (f (flip fwd s'))
+> flipSnk :: (Snk a -> Snk a) -> Src a -> Src a
+> flipSnk f s s' = shiftSrc s (f (flip fwd s'))
 
-> swap :: Buffering -> Snk b -> CoSnk b
-> swap f s = f (dnintro' s)
+> swapBuffer :: Buffering -> Snk b -> CoSnk b
+> swapBuffer f s = f (dnintro' s)
 
 > bufferedDmux :: CoSrc a -> CoSrc a -> Src a
 > bufferedDmux s1 s2 t = do
@@ -876,7 +876,14 @@ inverted to work on sinks, as follows.
 >   forkIO $ forward (chanCoSnk c) s2
 >   chanSrc c t
 
+
+Application: chat server
+========================
+
+Here is the implementation of a chat server with two clients:
+
 > type Client a = (CoSrc a, Snk a)
+
 
 
 Everything sent to this sink will be sent to both arg. sinks.
@@ -889,8 +896,6 @@ Everything sent to this sink will be sent to both arg. sinks.
 >          shiftSrc xs (collapseSnk  (flip fwd c1)
 >                                    (flip fwd c2))))
 
-> tee :: Src a -> Snk a -> Src a
-> tee s1 t1 = swap' (collapseSnk t1) s1
 
 > server :: Client a -> Client a -> Eff
 > server (i1,o1) (i2,o2) = forward  (bufferedDmux i1 i2)
@@ -934,20 +939,15 @@ Another kind of continuations here.
 >     Nil        -> scan (f Nothing) mres Nil
 >     Cons x cs  -> forward cs (scan (f $ Just x) mres)
 
-> results :: P s a -> Src s -> Src a
-> results p0 src snk = shiftSrc src (scan p0 (flip fwd snk))
+> parse :: P s a -> Src s -> Src a
+> parse p0 src snk = shiftSrc src (scan p0 (flip fwd snk))
 >  where
 >   scan :: P s a -> Snk a -> Snk s
->   scan (Result res p) ret        xs     = ret (Cons res (results p $ fwd xs))
+>   scan (Result res p) ret        xs     = ret (Cons res (parse p $ fwd xs))
 >   scan Fail           ret        xs     = ret Nil >> fwd xs Full
 >   scan (Sym f)        mres       xs     = case xs of
 >     Nil        -> scan (f Nothing) mres Nil
 >     Cons x cs  -> forward cs (scan (f $ Just x) mres)
-
-
-
-
-
 
 
 Summary
@@ -966,6 +966,119 @@ consume Snk if you can, CoSnk if you must.
         Try to produce          Try  to consume
 
 Table of transparent functions (implementable without reference to IO, preserving syncronicity)
+
+
+
+> unzipSnk :: Snk (a,b) -> Source' a -> Source' b -> Eff
+> unzipSnk s Nil (Cons _ s') = s' Full >> s Nil
+> unzipSnk s (Cons _ s') Nil = s' Full >> s Nil
+> unzipSnk s (Cons a s1) (Cons b s2) = s (Cons (a,b) (zipSrc s1 s2))
+> 
+> zipSrc :: Src a -> Src b -> Src (a,b)
+> zipSrc s1 s2 Full = s1 Full >> s2 Full
+> zipSrc s1 s2 (Cont s) = s1 (Cont (\source1 -> s2 (Cont (\source2 -> unzipSnk s source1 source2))))
+> 
+> unZipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
+> unZipSrc sab ta tb = shiftSrc sab $ \sab' ->
+>   case sab' of
+>     Nil -> tb Nil >> ta Nil
+>     Cons (a,b) xs -> ta $ Cons a $ \sa ->
+>                      tb $ Cons b $ \sb ->
+>                      unZipSrc (fwd sab')
+>                               (flip fwd sa)
+>                               (flip fwd sb)
+> 
+> 
+> unZipSrc0 :: Src (a,b) -> Snk a -> Snk b -> Eff
+> unZipSrc0 sab ta tb = shiftSrc sab $ \sab' ->
+>   case sab' of
+>     Nil -> tb Nil >> ta Nil
+>     Cons (a,b) xs -> ta $ Cons a $ \sa ->
+>                      tb $ Cons b $ \sb ->
+>                      unZipSrc (fwd sab')
+>                               (flip fwd sa)
+>                               (flip fwd sb)
+> 
+> unZipSnk0 :: Snk (a,b) -> Src a -> Src b -> Eff
+> unZipSnk0 sab ta tb =
+>   shiftSrc ta $ \ta' ->
+>   case ta' of
+>     Nil -> tb Full >> sab Nil
+>     Cons a as ->  shiftSrc tb $ \tb' ->  case tb' of
+>       Nil -> as Full >> sab Nil
+>       Cons b bs -> sab (Cons (a,b) $ \sab' -> unZipSnk0 (flip fwd sab') as bs)
+>  
+> 
+> zipSnk :: Snk a -> Snk b -> Snk (a,b)
+> zipSnk sa sb Nil = sa Nil >> sb Nil
+> zipSnk sa sb (Cons (a,b) tab) = sa $ Cons a $ \sa' ->
+>                                 sb $ Cons b $ \sb' ->
+>                                 shiftSnk (zipSnk (flip fwd sa') (flip fwd sb')) tab
+> 
+> scanSrc :: (a -> b -> b) -> b -> Src a -> Src b
+> scanSrc f z src Full = src Full
+> scanSrc f z src (Cont s) = src $ Cont $ scanSnk f z s
+> 
+> scanSnk :: (a -> b -> b) -> b -> Snk b -> Snk a
+> scanSnk f z snk Nil = snk Nil
+> scanSnk f z snk (Cons a s) = snk $ Cons next $ scanSrc f next s
+>   where next = f a z
+
+Return the last element of the source, or the first argument if the
+source is empty.
+
+> lastSrc :: a -> Src a -> NN a
+> lastSrc x s k = shiftSrc s $ \s' -> case s' of
+>   Nil -> k x
+>   Cons x' cs -> lastSrc x' cs k
+
+> dropSrc :: Int -> Src a -> Src a
+> dropSrc _ s Full = s Full
+> dropSrc 0 s (Cont s') = s (Cont s')
+> dropSrc i s (Cont s') = s (Cont (dropSnk i s'))
+ 
+> dropSnk :: Int -> Snk a -> Snk a
+> dropSnk 0 s (Cons a s') = s (Cons a s')
+> dropSnk 0 s Nil = s Nil
+> dropSnk i s Nil = s Nil
+> dropSnk i s (Cons a s') = s' (Cont (dropSnk (i-1) s))
+ 
+> enumFromToSrc :: Int -> Int -> Src Int
+> enumFromToSrc b e Full = return ()
+> enumFromToSrc b e (Cont s)
+>   | b > e     = s Nil
+>   | otherwise = s (Cons b (enumFromToSrc (b+1) e))
+
+> linesSrc :: Src Char -> Src String
+> linesSrc s Full = s Full
+> linesSrc s (Cont s') = s (Cont $ unlinesSnk s')
+ 
+> unlinesSnk :: Snk String -> Snk Char
+> unlinesSnk = unlinesSnk' []
+
+> unlinesSnk' :: String -> Snk String -> Snk Char
+> unlinesSnk' acc s Nil = s (Cons acc empty)
+> unlinesSnk' acc s (Cons '\n' s') = s (Cons (reverse acc) (linesSrc s'))
+> unlinesSnk' acc s (Cons c s') = s' (Cont $ unlinesSnk' (c:acc) s)
+
+> untilSnk :: (a -> Bool) -> Snk a
+> untilSnk p Nil = return ()
+> untilSnk p (Cons a s)
+>   | p a  = s Full
+>   | True = s (Cont (untilSnk p))
+
+> interleave :: Src a -> Src a -> Src a
+> interleave s1 s2 Full = s1 Full >> s2 Full
+> interleave s1 s2 (Cont s) = s1 (Cont (interleaveSnk s s2))
+
+> interleaveSnk :: Snk a -> Src a -> Snk a
+> interleaveSnk snk src Nil = forward src snk
+> interleaveSnk snk src (Cons a s) = snk (Cons a (interleave s src))
+
+> tee :: Src a -> Snk a -> Src a
+> tee s1 t1 = flipSnk (collapseSnk t1) s1
+
+
 
 Table of primitive functions (implementable by reference to IO, may break syncronicity)
 
@@ -1004,7 +1117,9 @@ Feldspar, a DSL for digital signal processing, has a notion of streams
 built on monads \citet{svenningsson15:monadic_streams}. In Haskell
 the stream type can be written as follows:
 
-> type Stream a = IO (IO a)
+\begin{spec}
+type Stream a = IO (IO a)
+\end{spec}
 
 Intuitively the outer monad can be understood as performing
 initialization which creates the inner monadic computation. The inner
@@ -1032,8 +1147,8 @@ Wadler 12, Pfenning and Caires.
 
 Stream is the direct translation of a linear type for a stream protocol:
 
-Source a = 1 ⊕ (a ⊗ (Sink a)^⊥)
-Sink a = 1 ⊕ (Source a)^⊥
+Source a = 1 ⊕ (a ⊗ N (Sink a))
+Sink a = 1 ⊕ N (Source a)
 
 
 Future Work
