@@ -981,29 +981,21 @@ Table of transparent functions (implementable without reference to IO, preservin
 >       Cons b bs -> forward (cons (a,b) $ zipSrc as bs) sab
 
 > unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
-> unzipSrc sab ta tb = shiftSrc sab $ \sab' ->
->   case sab' of
->     Nil -> tb Nil >> ta Nil
->     Cons (a,b) xs -> ta $ Cons a $ \sa ->
->                      tb $ Cons b $ \sb ->
->                      unzipSrc xs
->                               (flip fwd sa)
->                               (flip fwd sb)
- 
+> unzipSrc sab ta tb = shiftSnk (zipSnk ta tb) sab
 
 > zipSnk :: Snk a -> Snk b -> Snk (a,b)
 > zipSnk sa sb Nil = sa Nil >> sb Nil
 > zipSnk sa sb (Cons (a,b) tab) = sa $ Cons a $ \sa' ->
 >                                 sb $ Cons b $ \sb' ->
->                                 shiftSnk (zipSnk (flip fwd sa') (flip fwd sb')) tab
-> 
+>                                 unzipSrc tab (flip fwd sa') (flip fwd sb')
+
 > scanSrc :: (a -> b -> b) -> b -> Src a -> Src b
-> scanSrc f z src Full = src Full
-> scanSrc f z src (Cont s) = src $ Cont $ scanSnk f z s
-> 
+> scanSrc _ _ src Full      = src Full
+> scanSrc f z src (Cont s)  = src $ Cont $ scanSnk f z s
+
 > scanSnk :: (a -> b -> b) -> b -> Snk b -> Snk a
-> scanSnk f z snk Nil = snk Nil
-> scanSnk f z snk (Cons a s) = snk $ Cons next $ scanSrc f next s
+> scanSnk f z snk Nil          = snk Nil
+> scanSnk f z snk (Cons a s)   = snk $ Cons next $ scanSrc f next s
 >   where next = f a z
 
 Return the last element of the source, or the first argument if the
@@ -1018,15 +1010,15 @@ source is empty.
 > dropSrc _ s Full = s Full
 > dropSrc 0 s (Cont s') = s (Cont s')
 > dropSrc i s (Cont s') = s (Cont (dropSnk i s'))
- 
+
 > dropSnk :: Int -> Snk a -> Snk a
 > dropSnk 0 s (Cons a s') = s (Cons a s')
 > dropSnk 0 s Nil = s Nil
-> dropSnk i s Nil = s Nil
-> dropSnk i s (Cons a s') = s' (Cont (dropSnk (i-1) s))
- 
+> dropSnk _ s Nil = s Nil
+> dropSnk i s (Cons _ s') = s' (Cont (dropSnk (i-1) s))
+
 > enumFromToSrc :: Int -> Int -> Src Int
-> enumFromToSrc b e Full = return ()
+> enumFromToSrc _ _ Full = return ()
 > enumFromToSrc b e (Cont s)
 >   | b > e     = s Nil
 >   | otherwise = s (Cons b (enumFromToSrc (b+1) e))
@@ -1034,7 +1026,7 @@ source is empty.
 > linesSrc :: Src Char -> Src String
 > linesSrc s Full = s Full
 > linesSrc s (Cont s') = s (Cont $ unlinesSnk s')
- 
+
 > unlinesSnk :: Snk String -> Snk Char
 > unlinesSnk = unlinesSnk' []
 
@@ -1043,8 +1035,11 @@ source is empty.
 > unlinesSnk' acc s (Cons '\n' s') = s (Cons (reverse acc) (linesSrc s'))
 > unlinesSnk' acc s (Cons c s') = s' (Cont $ unlinesSnk' (c:acc) s)
 
+Consume elements until the predicate is reached; then the sink is
+closed.
+
 > untilSnk :: (a -> Bool) -> Snk a
-> untilSnk p Nil = return ()
+> untilSnk _ Nil = return ()
 > untilSnk p (Cons a s)
 >   | p a  = s Full
 >   | True = s (Cont (untilSnk p))
