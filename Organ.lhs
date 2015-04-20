@@ -1166,14 +1166,20 @@ closed.
 > tee s1 t1 = flipSnk (collapseSnk t1) s1
 
 > filterSrc :: (a -> Bool) -> Src a -> Src a
-> filterSrc _ src Full = src Full
-> filterSrc p src (Cont s) = src (Cont (filterSnk p s))
- 
+> filterSrc p = flipSnk (filterSnk p)
+
 > filterSnk :: (a -> Bool) -> Snk a -> Snk a
 > filterSnk _ snk Nil = snk Nil
 > filterSnk p snk (Cons a s)
 >   | p a       = snk (Cons a (filterSrc p s))
 >   | otherwise = s (Cont (filterSnk p snk))
+
+> unchunk :: Src [a] -> Src a
+> unchunk = flipSnk chunkSnk
+
+> chunkSnk :: Snk a -> Snk [a]
+> chunkSnk s Nil = s Nil
+> chunkSnk s (Cons x xs) = forward (fromList x `appendSrc` unchunk xs) s
 
 Table of primitive functions (implementable by reference to IO, may break syncronicity)
 
