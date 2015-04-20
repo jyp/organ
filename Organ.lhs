@@ -407,6 +407,7 @@ data. We could write the following:
 However, calling await may break linearity, so we will refrain to use
 \var{match} in the following.
 
+TODO: flipSnk, flipSrc
 
 Furthermore, both \var{Src} and \var{Snk} are functors and \var{Src}
 is a monad. The instances are somewhat involved, so we'll defer them
@@ -424,9 +425,7 @@ The natural implementation is by mutual recursion. The main subtlety
 is that, when reaching the $n$th element, both ends of the stream must
 be notified of its closing.
 
-> takeSrc _ s Full = s Full
-> takeSrc 0 s (Cont s') = s Full >> s' Nil -- Subtle case
-> takeSrc i s (Cont s') = s (Cont (takeSnk i s'))
+> takeSrc i = flipSnk (takeSnk i)
 
 > takeSnk _ s Nil = s Nil
 > takeSnk 0 s (Cons _ s') = s Nil >> s' Full -- Subtle case
@@ -545,9 +544,7 @@ Sources are functors, while sinks are contravariant functors:
 The implementation follows the pattern introduced above: \var{mapSrc}
 and \var{mapSnk} are defined by mutual recursion.
 
-> mapSrc _ src Full = src Full
-> mapSrc f src (Cont s)
->   = src (Cont (mapSnk f s))
+> mapSrc f = flipSnk (mapSnk f)
 
 > mapSnk _ snk Nil = snk Nil
 > mapSnk f snk (Cons a s)
@@ -598,15 +595,16 @@ Synchronicity and Asynchronicity
 One of the main benefits of streams as defined here is that the
 programming interface appears to be asynchronous. That is, in the
 source code, production and consumption of data are described in
-isolation and can be composed freely later. In other words, one can
-build a data source regardless of how the data is be consumed, or
-dually one can build a sink regardless of how the data is produced.
-Despite the apparent asynchronicity, all the code can (and is)
-executed synchronously: there is a single thread of control.
+isolation. In other words, one can build a data source regardless of
+how the data is be consumed, or dually one can build a sink regardless
+of how the data is produced.  Despite the apparent asynchronicity, all
+the code can (and is) executed synchronously: composing sources and
+sinks require no concurrency (nor arbitrary control structures). After
+composing sources and sinks, there is a single thread of control.
 
 A consequence of synchronicity is that the programer cannot be
-implicity buffering data: every production is matched by a consuption
-(and vice versa). However, one can buffer data by explicity
+implicity buffering data: every production must be matched by a
+consuption (and vice versa). However, one can buffer data by explicity
 buiding lists, if one so decides:
 
 > toList :: Src a -> NN [a]
@@ -618,18 +616,21 @@ In sum, synchronicity restricts the kind of operations one can
 constructs, in exchange for two guarantees:
 
 1. Finalization of sources and stream is synchronous
-2. No implicit memory allocation happen
+2. No implicit memory allocation happens
 
 While the guarantees have been discussed so far, it may be unclear how
 synchronicity actually restricts the programs one can write. In the
 rest of the section we show by example how the restriction plays out.
 
-One operation supported by synchronous behaviour is demultiplexing of
-sources, by connecting it to two sinks.
+Example: demultiplexing
+-----------------------
+
+One operation supported by synchronous behaviour is the demultiplexing
+of a source by connecting it to two sinks.
 
 > dmux' :: Src (Either a b) -> Snk a -> Snk b -> Eff
 
-which we can implement as follows:
+We can implement this demultiplexing as follows:
 
 > dmux :: Source' (Either a b) -> Sink' a -> Sink' b -> Eff
 > dmux Nil ta tb = fwd Nil ta >> fwd Nil tb
@@ -651,41 +652,63 @@ The key ingredient is that demultiplexing starts by reading the next
 value available on the source. Depending on its value, we feed the
 data to either of the sinks are proceed.
 
+However, multiplexing sources cannot be implemented while respecting
+synchronicity. Let us attempt anyway, using the following type
+signature:
 
-> mux0 :: Src a -> Src b -> Src (Either a b)
-> mux0 sa sb tab = error "impossible"
+\begin{spec}
+mux :: Src a -> Src b -> Src (Either a b)
+mux sa sb = _
+\end{spec}
 
+We can try to fill the hole by reading on a source. However, if we do
+this, the choice falls to us to choose which source to run first. We
+may pick \var{sa}, however it may be blocking, while \var{sb} is ready
+with data. This is not really multiplexing, at best this approach
+would give us interleaving of data sources by taking turns.
 
-Try to begin by reading on a source. However, if we do this, the
-choice falls to us to choose which source to run first. We may pick
-sa, while it is blocking and sb is ready with data. This is not
-satisfactory situation.
+In order to make any progress, we can let the choice of which source
+to pick fall on the consumer of the stream. What we need in this case
+is the so-called additive conjuction. It is the dual of the
+\var{Either} type: there is a choice, but it falls on the consumer
+rather than the producer of the data. Additive conjuction, written &,
+can be encoded using the deMorgan law:
 
-Can we let the choice fall on the consumer?
+\begin{spec}
+not (a ⊕ b) = not a & not b
+\end{spec}
 
 > type a & b = N (Either (N a) (N b))
 
-> mux1 :: Src a -> Src b -> Src (a & b)
+We can then try to inhabit the following type:
 
- This helps, but we still can't implement the multiplexer.
+> mux :: Src a -> Src b -> Src (a & b)
 
-> mux1 sa sb (Cont tab) = tab $ Cons
+Unfortunately, we still cannot implement multiplexing. Consider the
+following attempt, where we begin by asking the consumer if it desires
+$a$ or $b$. If the answer is $a$, we need to, we can extract a
+correponding value from \var{sa} and yield it; and symmetrically for
+$b$.
+
+> mux sa sb (Cont tab) = tab $ Cons
 >                         (\ab -> case ab of
->                                  Left a -> sa $ Cont $ \(Cons a' rest) -> a a')
->                         (error "rest out of scope")
+>                                  Left   ka -> sa $ Cont $ \(Cons a resta) -> ka a
+>                                  Right  kb -> sb $ Cont $ \(Cons b restb) -> kb b)
+>                         (error "???")
 
-Indeed the shape of the recursive call (second argument to Cons) must
-depend on the choice made by the consumer (first argument of
-Cons). However the type of Cons forces us to produce its arguments
-independently.
+However, there is no way to then make a recursive call (???) to
+continue processing.  Indeed the recursive call to make must depend on
+the choice made by the consumer (using \var{resta} or
+\var{restb}). However the type of \var{Cons} forces us to produce its
+arguments independently.
 
 What we need to do is to reverse the control fully: we need a data
-source which behaves like a sink on the outside.
+source which is in control of the flow of execution.
 
 Co-Sources, Co-Sinks
 -------------------
 
-The structure we are looking for are co-sources. Which we study in this section.
+The structure we are looking for are co-sources, which we study in this section.
 
 Remembering that producing $N a$ is equivalent to consuming $a$, we
 define:
@@ -693,8 +716,7 @@ define:
 > type CoSrc a = Snk (N a)
 > type CoSnk a = Src (N a)
 
-Implementing multipexing on co-sources is straightforward, given
-demultiplexing on sources:
+Implementing multipexing on co-sources is then straightforward:
 
 > mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
 > mux' sa sb = unshiftSnk $ \tab -> dmux' (dndel tab) sa sb
@@ -712,13 +734,17 @@ CoSrc is a functor, and CoSnk is a contravariant functor.
 > mapCoSnk f = mapSrc (\b' -> \a -> b' (f a))
 
 
-One access elements of a co-source only "one at a time". One cannot
-extract the contents of a co-source as a list.
+One access elements of a co-source only "one at a time". That is, one
+cannot extract the contents of a co-source as a list. Attempting to
+implement this extraction looks as follows. If one tries to begin by
+constructing the CoSrc (1), then there is no way to produce subsequent
+elements of the list. If one tries to begin by constructing the list,
+then no data is available.
 
 > toList' :: CoSrc a -> NN [a]
-> toList' k1 k2 = k1 $ Cons (error "N a?") (error "rest")
+> toList' k1 k2 = k1 $ Cons (\a -> k2 [a]) (error "rest")
 > toList' k1 k2 = k2 $ (error "a?") : (error "rest")
-> toList' k1 k2 = error "impossible"
+
 
 Yet it is possible to define useful and effectful co-sources and
 co-sinks. The first example is providing a file as a co-source:
@@ -737,8 +763,8 @@ co-sinks. The first example is providing a file as a co-source:
 Compared to \var{fileSrc}, the difference is that this function can
 decide the ordering of effects. That is, the effects (1) and (2) have
 no data dependency. Therefore they may be run in any order, including
-concurrently.
-
+concurrently (we will see in the next section how this situation
+generalises).
 
 The second example is a co-sink which sends its contents to a file.
 
@@ -747,10 +773,10 @@ The second example is a co-sink which sends its contents to a file.
 > coFileSink h (Cont c) = c (Cons  (hPutStrLn h)
 >                                  (coFileSink h))
 
-Compared to fileSnk, the difference is that one does not control the
+Compared to \var{fileSnk}, the difference is that one does not control the
 order of execution of effects. The effect of writing the current line
-is put in a data structure, and its execution is up to the source
-which one will eventually connect to the sink.
+is put in a data structure, and its execution is up to the co-source
+which will eventually connect to the co-sink.
 
 In sum, using co-sources and co-sinks shifts the flow of control from
 the sink to the source. It should be stressed that, in the programs
@@ -773,14 +799,14 @@ hold locally.
 
 \paragraph{Concurrency}
 
-When converting a \var{Src} to a \var{CoSrc} (or dually \var{CoSnk} to a \var{Snk}), we have
-two streams which are ready to respond to pulling of data from them.
-This means that concurrency opportunities arise, as we have seen an
-example above when manually converting the file source to a file
-co-source.
+When converting a \var{Src} to a \var{CoSrc} (or dually \var{CoSnk} to
+a \var{Snk}), we have two streams which are ready to respond to
+pulling of data from them.  This means that concurrency opportunities
+arise, as we have seen an example above when manually converting the
+file source to a file co-source.
 
-In general, given a concurrency strategy, we can implement the above
-conversions:
+In general, given a scheduling strategy, we can implement the above
+two conversions:
 
 > srcToCoSrc :: Strategy a -> Src a -> CoSrc a
 > coSnkToSnk :: Strategy a -> CoSnk a -> Snk a
@@ -792,14 +818,14 @@ co-sink:
 
 Implementing the conversions is then straightforward:
 
-> srcToCoSrc strat k s0 = k $ Cont $ \ s1 -> strat s1 s0
-> coSnkToSnk strat k s0 = k $ Cont $ \ s1 -> strat s0 s1
+> srcToCoSrc strat s s0 = shiftSrc s $ \ s1 -> strat s1 s0
+> coSnkToSnk strat s s0 = shiftSrc s $ \ s1 -> strat s0 s1
 
 There are (infinitely) many possible concurrency strategies, however
-we think that one will mostly be using either of the following two.
-The simplest one (used in \var{coFileSrc}) is sequential execution,
-and is defined by looping through both sources and match the
-consumptions/productions elementwise.
+in practice we think that one will mostly be combining either of the
+following two flavours.  The simplest one (used in \var{coFileSrc}) is
+sequential execution, and is defined by looping through both sources
+and match the consumptions/productions elementwise.
 
 > sequentially :: Strategy a
 > sequentially Nil (Cons _ xs) = xs Full
@@ -823,21 +849,21 @@ expensive and distributable over computation units.
 >    shiftSrc xs' $ \sna ->
 >    concurrently sa sna)
 
-The above implementation naively spawns a thread for every element,
-but in reality one will most likely want to divide the stream into
+The above implementation naively spawns a thread for every element.
+In reality one will most likely want to divide the stream into
 chunks before spawning threads. Because strategies are separate
 components, if it turns out that a bad choice was made it is easy to
 swap a strategy for another.
 
 \paragraph{Buffering}
 
-Consider now the situation where one needs to convert from a CoSrc to
-a Src (or from a Snk to a CoSnk).  Here, we have two streams which
-want to control the execution flow. The conversion can only be
-implemented by running both streams in concurrent threads, and have
-them communicate via a form of buffer. A form of buffer that we have
-seen before is the file. Using it yields the following buffering
-implementation:
+Consider now the situation where one needs to convert from a
+\var{CoSrc} to a \var{Src} (or from a \var{Snk} to a \var{CoSnk}).
+Here, we have two streams which want to control the execution
+flow. The conversion can only be implemented by running both streams
+in concurrent threads, and have them communicate via some form of
+buffer. A form of buffer that we have seen before is the file. Using
+it yields the following buffering implementation:
 
 > fileBuffer :: CoSrc String -> Src String
 > fileBuffer f g = do
@@ -868,9 +894,10 @@ as a buffering means:
 >   forkIO $ forward (chanCoSnk c) f
 >   chanSrc c g
 
-In certain situations (for example for a stream yielding mouse
-positions), one may want to ignore all but the latest datum. In this
-case a single memory reference can serve as buffer:
+In certain situations (for example for a stream yielding a status
+whose history does not matter, like mouse positions) one may want to
+ignore all but the latest datum. In this case a single memory cell can
+serve as buffer:
 
 > varCoSnk :: IORef a -> CoSnk a
 > varCoSnk _ Full      = return ()
@@ -892,15 +919,10 @@ All the above bufferings work on sources, but they can be generically
 inverted to work on sinks, as follows.
 
 > type Buffering = forall a. CoSrc a -> Src a
-
-> flipSnk :: (Snk a -> Snk b) -> Src b -> Src a
-> flipSnk f s s' = shiftSrc s (f (flip fwd s'))
-
-> flipSrc :: (Src a -> Src b) -> Snk b -> Snk a
-> flipSrc f s s' = shiftSnk s (f (fwd s'))
-
 > swapBuffer :: Buffering -> Snk b -> CoSnk b
 > swapBuffer f s = f (dnintro' s)
+
+
 
 
 Application: idealised echo server
@@ -1045,6 +1067,11 @@ consume Snk if you can, CoSnk if you must.
 
 Table of transparent functions (implementable without reference to IO, preserving syncronicity)
 
+> flipSnk :: (Snk a -> Snk b) -> Src b -> Src a
+> flipSnk f s s' = shiftSrc s (f (flip fwd s'))
+
+> flipSrc :: (Src a -> Src b) -> Snk b -> Snk a
+> flipSrc f s s' = shiftSnk s (f (fwd s'))
 
 > zipSrc :: Src a -> Src b -> Src (a,b)
 > zipSrc s1 s2 = unshiftSrc (\t -> unzipSnk t s1 s2)
@@ -1068,8 +1095,7 @@ Table of transparent functions (implementable without reference to IO, preservin
 >                                 unzipSrc tab (flip fwd sa') (flip fwd sb')
 
 > scanSrc :: (b -> a -> b) -> b -> Src a -> Src b
-> scanSrc _ _ src Full      = src Full
-> scanSrc f !z src (Cont s)  = src $ Cont $ scanSnk f z s
+> scanSrc f !z = flipSnk (scanSnk f z)
 
 > scanSnk :: (b -> a -> b) -> b -> Snk b -> Snk a
 > scanSnk _ _ snk Nil          = snk Nil
@@ -1092,15 +1118,15 @@ source is empty.
 >   Cons x' cs -> lastSrc x' cs k
 
 > dropSrc :: Int -> Src a -> Src a
-> dropSrc _ s Full = s Full
-> dropSrc 0 s (Cont s') = s (Cont s')
-> dropSrc i s (Cont s') = s (Cont (dropSnk i s'))
+> dropSrc i = flipSnk (dropSnk i)
 
 > dropSnk :: Int -> Snk a -> Snk a
-> dropSnk 0 s (Cons a s') = s (Cons a s')
-> dropSnk 0 s Nil = s Nil
+> dropSnk 0 s s' = s s'
 > dropSnk _ s Nil = s Nil
-> dropSnk i s (Cons _ s') = s' (Cont (dropSnk (i-1) s))
+> dropSnk i s (Cons _ s') = shiftSrc (dropSrc (i-1) s') s
+
+> fromList :: [a] -> Src a
+> fromList = foldr cons empty
 
 > enumFromToSrc :: Int -> Int -> Src Int
 > enumFromToSrc _ _ Full = return ()
@@ -1109,8 +1135,7 @@ source is empty.
 >   | otherwise = s (Cons b (enumFromToSrc (b+1) e))
 
 > linesSrc :: Src Char -> Src String
-> linesSrc s Full = s Full
-> linesSrc s (Cont s') = s (Cont $ unlinesSnk s')
+> linesSrc = flipSnk unlinesSnk
 
 > unlinesSnk :: Snk String -> Snk Char
 > unlinesSnk = unlinesSnk' []
