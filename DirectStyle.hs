@@ -150,16 +150,6 @@ zipSnk sa sb (Cons (a,b) tab) = sa $ Cons a $ \sa' ->
                                 sb $ Cons b $ \sb' ->
                                 shiftSnk (zipSnk (flip fwd sa') (flip fwd sb')) tab
 
-scanSrc :: (a -> b -> b) -> b -> Src a -> Src b
-scanSrc f z src Full = src Full
-scanSrc f z src (Cont s) = src $ Cont $ scanSnk f z s
-
-scanSnk :: (a -> b -> b) -> b -> Snk b -> Snk a
-scanSnk f z snk Nil = snk Nil
-scanSnk f z snk (Cons a s) = snk $ Cons next $ scanSrc f next s
-  where next = f a z
-
-
 mapSrc :: (a -> b) -> Src a -> Src b
 mapSrc f src Full = src Full
 mapSrc f src (Cont s) = src (Cont (mapSnk f s))
@@ -336,13 +326,14 @@ thenFoo :: Snk a -> Src a -> Src a
 thenFoo s2 s Full = compose s s2
 thenFoo s2 s (Cont s') = s (Cont (thenSnk s' s2))
 
-scanrSrc :: (a -> b -> b) -> b -> Src a -> Src b
-scanrSrc f a src Full = src Full
-scanrSrc f a src (Cont s) = src (Cont (scanrSnk f a s))
+scanSrc :: (a -> b -> b) -> b -> Src a -> Src b
+scanSrc f z src Full = src Full
+scanSrc f z src (Cont s) = src $ Cont $ scanSnk f z s
 
-scanrSnk :: (a -> b -> b) -> b -> Snk b -> Snk a
-scanrSnk f b src Nil = src (Cons b empty)
-scanrSnk f b src (Cons a s) = src (Cons b (scanrSrc f (f a b) s))
+scanSnk :: (a -> b -> b) -> b -> Snk b -> Snk a
+scanSnk f z snk Nil = snk Nil
+scanSnk f z snk (Cons a s) = snk $ Cons next $ scanSrc f next s
+  where next = f a z
 
 filterSrc :: (a -> Bool) -> Src a -> Src a
 filterSrc p src Full = src Full

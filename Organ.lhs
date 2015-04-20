@@ -2,7 +2,7 @@
 
  <!--
 
-> {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms #-}
+> {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms, BangPatterns #-}
 > module Organ where
 > import System.IO
 > import Control.Exception
@@ -10,6 +10,7 @@
 > import Control.Applicative hiding (empty)
 > import Data.IORef
 > import Prelude hiding (tail)
+> import Control.Monad
 
 -->
 
@@ -78,11 +79,10 @@ Second, lazy evaluation does not extend nicely to effectful
 processing. That is, if (say) an input list is produced by reading a
 file lazily, one is exposed to losing referential transparency (as
 Kiselyov {TODO cite} has shown). For example, one may rightfully
-expect that both following programs have the same behaviour, but the
-second one prints nothing\footnote{This expectation is expressed in a
+expect\footnote{This expectation is expressed in a
 Stack Overflow question, accessible at this URL:
 http://stackoverflow.com/questions/296792/haskell-io-and-closing-files
-}:
+} that both following programs have the same behaviour:
 
 \begin{spec}
 main = do  inFile <- openFile "foo" ReadMode
@@ -96,11 +96,14 @@ main = do  inFile <- openFile "foo" ReadMode
            putStr contents
 \end{spec}
 
-Indeed, because \var{hGetContents} reads the file lazily, the \var{hClose}
+Indeed, the putStr and hClose command act on unrelated resources, and
+thus swapping them should have no effect.  However, while the first
+program prints the `foo` file, the second one prints nothing.  Indeed,
+because \var{hGetContents} reads the file lazily, the \var{hClose}
 operation has the effect to truncate the list. In the first program,
 printing the contents force reading the file. One may argue that
-\var{hClose} should not be called in the first place, however closing the
-handle happens only when the \var{contents} list can be garbage
+\var{hClose} should not be called in the first place, however closing
+the handle happens only when the \var{contents} list can be garbage
 collected (in full), but relying on garabage collection for cleaning
 resources is brittle, and compounds badly with the first issue
 discussed above.  Again, if one wants to use lazy effectful
@@ -131,18 +134,18 @@ will be properly closed anyway.
 
 The contributions of this paper are
 
-* A re-interpretation of coroutine-based effectful computing, based on
-a computational interpretation of linear logic, and
-
-* A Haskell library built on this approach. Besides supporting the
-compositionality principle as outlined above, it features two novel
-aspects:
+* A Haskell library for streaming IO built on the linearity
+principle. Besides supporting compositionality as outlined above, it
+features two novel aspects:
 
   1. A more lightweight design than state-of-the-art co-routine based
     libraries, afforded by the linearity convention.
 
   2. Support for explicit buffering and control structures, while
     still respecting compositionality.
+
+* Besides, the approach followed for developing this library
+generalises to other types than stream. (TODO?)
 
 TODO: outline
 
@@ -1013,14 +1016,21 @@ Table of transparent functions (implementable without reference to IO, preservin
 >                                 sb $ Cons b $ \sb' ->
 >                                 unzipSrc tab (flip fwd sa') (flip fwd sb')
 
-> scanSrc :: (a -> b -> b) -> b -> Src a -> Src b
+> scanSrc :: (b -> a -> b) -> b -> Src a -> Src b
 > scanSrc _ _ src Full      = src Full
-> scanSrc f z src (Cont s)  = src $ Cont $ scanSnk f z s
+> scanSrc f !z src (Cont s)  = src $ Cont $ scanSnk f z s
 
-> scanSnk :: (a -> b -> b) -> b -> Snk b -> Snk a
-> scanSnk f z snk Nil          = snk Nil
+> scanSnk :: (b -> a -> b) -> b -> Snk b -> Snk a
+> scanSnk _ _ snk Nil          = snk Nil
 > scanSnk f z snk (Cons a s)   = snk $ Cons next $ scanSrc f next s
->   where next = f a z
+>   where next = f z a
+
+> foldSrc' :: (b -> a -> b) -> b -> Src a -> NN b
+> foldSrc' f !z s nb = s (Cont (foldSnk' f z nb))
+
+> foldSnk' :: (b -> a -> b) -> b -> N b -> Snk a
+> foldSnk' _ z nb Nil = nb z
+> foldSnk' f z nb (Cons a s) = foldSrc' f (f z a) s nb
 
 Return the last element of the source, or the first argument if the
 source is empty.
@@ -1079,7 +1089,15 @@ closed.
 > tee :: Src a -> Snk a -> Src a
 > tee s1 t1 = flipSnk (collapseSnk t1) s1
 
-
+> filterSrc :: (a -> Bool) -> Src a -> Src a
+> filterSrc p src Full = src Full
+> filterSrc p src (Cont s) = src (Cont (filterSnk p s))
+ 
+> filterSnk :: (a -> Bool) -> Snk a -> Snk a
+> filterSnk p snk Nil = snk Nil
+> filterSnk p snk (Cons a s)
+>   | p a       = snk (Cons a (filterSrc p s))
+>   | otherwise = s (Cont (filterSnk p snk))
 
 Table of primitive functions (implementable by reference to IO, may break syncronicity)
 
@@ -1099,6 +1117,9 @@ Related Work
 >                           | IE_cont (Maybe ErrMsg)
 >                                     (Stream el -> m (Iteratee el m a, Stream el))
 >
+> type Enumerator el m a = Iteratee el m a -> m (Iteratee el m a)
+> type Enumeratee elo eli m a =
+>         Iteratee eli m a -> Iteratee elo m (Iteratee eli m a)
 
 http://johnlato.blogspot.se/2012/06/understandings-of-iteratees.html
 
@@ -1151,6 +1172,13 @@ Stream is the direct translation of a linear type for a stream protocol:
 Source a = 1 ⊕ (a ⊗ N (Sink a))
 Sink a = 1 ⊕ N (Source a)
 
+Parallelism ?
+===========
+
+
+> type Pull a = NN (Int -> a)
+> type Push a = N (Int -> N a)
+
 
 Future Work
 ===========
@@ -1167,6 +1195,10 @@ buffers and control structures, depending on the kind of mismatch.
 
 * Cast an new light on coroutine-based io by drawing inspiration from
 classical linear logic. Emphasis on polarity and duality.
+
+
+* A re-interpretation of coroutine-based effectful computing, based on
+a computational interpretation of linear logic, and
 
 
 \acks
@@ -1194,8 +1226,6 @@ ScratchPad
 TODO: on this simple program it's not clear when (or if) the input stream is going to be closed.
 
 
-> main = failure
-> 
 > func = do
 >   input <- hGetContents stdin
 >   writeFile "test1.txt" (unlines $ take 3 $ lines input)
