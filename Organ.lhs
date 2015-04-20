@@ -66,6 +66,8 @@ Hughes is lost.
 
 TODO: on this simple program it's not clear when (or if) the input stream is going to be closed.
 
+http://stackoverflow.com/questions/296792/haskell-io-and-closing-files
+
 > main = failure
 > 
 > func = do
@@ -968,6 +970,9 @@ Related Work
 > data Iteratee el m a = IE_done a
 >                           | IE_cont (Maybe ErrMsg)
 >                                     (Stream el -> m (Iteratee el m a, Stream el))
+>
+
+http://johnlato.blogspot.se/2012/06/understandings-of-iteratees.html
 
 *  \cite{kiselyov_lazy_2012}
 
