@@ -1,4 +1,4 @@
-% A Classical Approach to IO Streaming
+% A Linear Approach to Streaming
 
  <!--
 
@@ -853,12 +853,12 @@ be a UNIX pipe. Yet, one may prefer to use Concurrent Haskell channels
 as a buffering means:
 
 > chanCoSnk :: Chan a -> CoSnk a
-> chanCoSnk h Full = return ()
+> chanCoSnk _ Full = return ()
 > chanCoSnk h (Cont c) = c (Cons  (writeChan h)
 >                                 (chanCoSnk h))
 
 > chanSrc :: Chan a -> Src a
-> chanSrc h Full = return ()
+> chanSrc _ Full = return ()
 > chanSrc h (Cont c) = do  x <- readChan h
 >                          c (Cons x $ chanSrc h)
 
@@ -873,12 +873,12 @@ positions), one may want to ignore all but the latest datum. In this
 case a single memory reference can serve as buffer:
 
 > varCoSnk :: IORef a -> CoSnk a
-> varCoSnk h Full      = return ()
+> varCoSnk _ Full      = return ()
 > varCoSnk h (Cont c)  = c (Cons  (writeIORef h)
 >                                 (varCoSnk h))
 
 > varSrc :: IORef a -> Src a
-> varSrc h Full = return ()
+> varSrc _ Full = return ()
 > varSrc h (Cont c) = do  x <- readIORef h
 >                         c (Cons x $ varSrc h)
 
@@ -895,6 +895,9 @@ inverted to work on sinks, as follows.
 
 > flipSnk :: (Snk a -> Snk b) -> Src b -> Src a
 > flipSnk f s s' = shiftSrc s (f (flip fwd s'))
+
+> flipSrc :: (Src a -> Src b) -> Snk b -> Snk a
+> flipSrc f s s' = shiftSnk s (f (fwd s'))
 
 > swapBuffer :: Buffering -> Snk b -> CoSnk b
 > swapBuffer f s = f (dnintro' s)
@@ -1177,38 +1180,8 @@ intended, while being faithful to the theoretical foundations in
 logic, via the double-negation embedding.
 
 
-* "Conduits"
-
-
-* "Pipes"
-
-
-* Iteratees \cite{kiselyov_iteratees_2012}
-
-> type ErrMsg = String
-> data Stream el = EOF (Maybe ErrMsg) | Chunk [el]
-
-> data Iteratee el m a = IE_done a
->                           | IE_cont (Maybe ErrMsg)
->                                     (Stream el -> m (Iteratee el m a, Stream el))
->
-> type Enumerator el m a = Iteratee el m a -> m (Iteratee el m a)
-> type Enumeratee elo eli m a =
->         Iteratee eli m a -> Iteratee elo m (Iteratee eli m a)
-
-http://johnlato.blogspot.se/2012/06/understandings-of-iteratees.html
-
-*  \cite{kiselyov_lazy_2012}
-
-\begin{spec}
-type GenT e m = ReaderT (e -> m ()) m
---   GenT e m a  = (e -> m ()) -> m a
-type Producer m e = GenT e m ()
-type Consumer m e = e -> m ()
-type Transducer m1 m2 e1 e2 = Producer m1 e1 -> Producer m2 e2
-\end{spec}
-
-* FeldSpar modadic streams
+FeldSpar modadic streams
+------------------------
 
 Feldspar, a DSL for digital signal processing, has a notion of streams
 built on monads \citet{svenningsson15:monadic_streams}. In Haskell
@@ -1228,7 +1201,41 @@ streams only has one form of stream, corresponding to a source. Also,
 there is no support for timely release of resources, such things need
 to be dealt with outside of the stream framework.
 
-* Linear Types
+Iteratees
+---------
+
+> type ErrMsg = String
+> data Stream el = EOF (Maybe ErrMsg) | Chunk [el]
+
+> data Iteratee el m a  = IE_done a
+>                       | IE_cont  (Maybe ErrMsg)
+>                                  (Stream el -> m (Iteratee el m a, Stream el))
+>
+> type Enumerator el m a = Iteratee el m a -> m (Iteratee el m a)
+> type Enumeratee elo eli m a =
+>         Iteratee eli m a -> Iteratee elo m (Iteratee eli m a)
+
+\cite{kiselyov_iteratees_2012}
+
+http://johnlato.blogspot.se/2012/06/understandings-of-iteratees.html
+
+* "Conduits"
+* Pipes
+* Yield
+
+\cite{kiselyov_lazy_2012}
+
+\begin{spec}
+type GenT e m = ReaderT (e -> m ()) m
+--   GenT e m a  = (e -> m ()) -> m a
+type Producer m e = GenT e m ()
+type Consumer m e = e -> m ()
+type Transducer m1 m2 e1 e2 = Producer m1 e1 -> Producer m2 e2
+\end{spec}
+
+
+Linear Types
+------------
 
 The main choice which enables us to simplify the interface for our
 stream library is the linearity convention.
@@ -1255,6 +1262,7 @@ Future Work
 
 Beyond Haskell: native support for linear types. Even classical!
 
+Fusion
 
 Conclusion
 ==========
