@@ -890,11 +890,35 @@ inverted to work on sinks, as follows.
 
 > type Buffering = forall a. CoSrc a -> Src a
 
-> flipSnk :: (Snk a -> Snk a) -> Src a -> Src a
+> flipSnk :: (Snk a -> Snk b) -> Src b -> Src a
 > flipSnk f s s' = shiftSrc s (f (flip fwd s'))
 
 > swapBuffer :: Buffering -> Snk b -> CoSnk b
 > swapBuffer f s = f (dnintro' s)
+
+
+Application: idealised echo server
+==================================
+
+
+The server will communicate with each client via two streams, one for
+inbound messages, one for outbound ones. We want each client to be
+able to send and recieve messages in the order that they like. That
+is, from their point of view, they are in control of the message
+processing order. Hence a client should have a co-sink for sending
+messages to the server, and a source for recieving them.  On the
+server side, a client is thus represented by a pair of a co-source and
+a sink:
+
+> type Client a = (CoSrc a, Snk a)
+
+For simplicity we implement a chat server handling exactly two
+clients.
+
+The first problem is to mulitiplex the inputs of the clients. In the
+server, we do not actually want any client to be controlling the
+processing order. Hence we have to mulitiplex the messages in real time,
+using a channel:
 
 > bufferedDmux :: CoSrc a -> CoSrc a -> Src a
 > bufferedDmux s1 s2 t = do
@@ -903,17 +927,9 @@ inverted to work on sinks, as follows.
 >   forkIO $ forward (chanCoSnk c) s2
 >   chanSrc c t
 
-
-Application: chat server
-========================
-
-Here is the implementation of a chat server with two clients:
-
-> type Client a = (CoSrc a, Snk a)
-
-
-
-Everything sent to this sink will be sent to both arg. sinks.
+We then have to send each message to both clients. This may be done
+sending by the followig function, which forwards everything sent to a
+sink to its two argument sinks.
 
 > collapseSnk :: Snk a -> Snk a -> Snk a
 > collapseSnk t1 t2 Nil = t1 Nil >> t2 Nil
@@ -924,37 +940,58 @@ Everything sent to this sink will be sent to both arg. sinks.
 >                                    (flip fwd c2))))
 
 
+The server can then be given the following  definition.
+
+
 > server :: Client a -> Client a -> Eff
 > server (i1,o1) (i2,o2) = forward  (bufferedDmux i1 i2)
 >                                   (collapseSnk o1 o2)
 
+
 Application: Stream-Based Parsing
 =================================
 
-TODO
+The next application is a stream transformer which parses an input
+stream into structured chunks. This is useful for example to turn an
+xml file inputted as stream of characters into a stream of (opening
+and closing) tags.
 
-Parsing processes
+We beging by defining a pure parsing structure, modeled after the
+parallel parsing processes of \citet{claessen_parallel_2004}.  The
+parser is continuation based, but the effects being accumulated are
+parsing processes, defined as follows. The Sym constructor parses just
+a symbol, or Nothing if the end of stream is reached. A process may
+also Fail or return a result (and continue).
 
 > data P s res  =  Sym (Maybe s -> P s res)
 >               |  Fail
 >               |  Result res (P s res)
 
-Another kind of continuations here.
+A parser producing $a$ the double negation of $a$:
 
 > newtype Parser s a = P (forall res. (a -> P s res) -> P s res)
+
+The monading interface can then be built using shift and unshift:
 
 > instance Monad (Parser s) where
 >   return x  = P $ \fut -> fut x
 >   P f >>= k = P (\fut -> f (\a -> let P g = k a in g fut))
 
-> P p <|> P q = P (\fut -> best (p fut) (q fut))
+The essential parsing ingredient, disjunction, rests on the
+possibility to weave processes together, always picking that which
+fails last:
 
-> best :: P s a -> P s a -> P s a
-> best Fail x = x
-> best x Fail = x
-> best (Result res x) y = Result res (best x y)
-> best x (Result res y) = Result res (best x y)
-> best (Sym k1) (Sym k2) = Sym (\s -> best (k1 s) (k2 s))
+> weave :: P s a -> P s a -> P s a
+> weave Fail x = x
+> weave x Fail = x
+> weave (Result res x) y = Result res (weave x y)
+> weave x (Result res y) = Result res (weave x y)
+> weave (Sym k1) (Sym k2) = Sym (\s -> weave (k1 s) (k2 s))
+
+> P p <|> P q = P (\fut -> weave (p fut) (q fut))
+
+
+  <--
 
 > longestResultSnk :: forall a s. P s a -> N (Maybe a) -> Snk s
 > longestResultSnk p0 ret = scan p0 Nothing
@@ -966,11 +1003,17 @@ Another kind of continuations here.
 >     Nil        -> scan (f Nothing) mres Nil
 >     Cons x cs  -> forward cs (scan (f $ Just x) mres)
 
-> parse :: P s a -> Src s -> Src a
-> parse p0 src snk = shiftSrc src (scan p0 (flip fwd snk))
+-->
+
+Parsing then reconciles the execution of the process with the
+traversal of the source. In particular, whenever a result is
+encountered, it is fed to the sink.
+
+> parse :: forall s a. Parser s a -> Src s -> Src a
+> parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x Fail
 >  where
 >   scan :: P s a -> Snk a -> Snk s
->   scan (Result res p) ret        xs     = ret (Cons res (parse p $ fwd xs))
+>   scan (Result res _) ret        xs     = ret (Cons res $ parse q $ fwd xs)
 >   scan Fail           ret        xs     = ret Nil >> fwd xs Full
 >   scan (Sym f)        mres       xs     = case xs of
 >     Nil        -> scan (f Nothing) mres Nil
@@ -1090,11 +1133,11 @@ closed.
 > tee s1 t1 = flipSnk (collapseSnk t1) s1
 
 > filterSrc :: (a -> Bool) -> Src a -> Src a
-> filterSrc p src Full = src Full
+> filterSrc _ src Full = src Full
 > filterSrc p src (Cont s) = src (Cont (filterSnk p s))
  
 > filterSnk :: (a -> Bool) -> Snk a -> Snk a
-> filterSnk p snk Nil = snk Nil
+> filterSnk _ snk Nil = snk Nil
 > filterSnk p snk (Cons a s)
 >   | p a       = snk (Cons a (filterSrc p s))
 >   | otherwise = s (Cont (filterSnk p snk))
