@@ -48,76 +48,98 @@ that they provide. That is, simple components can be built and
 understood in isolation; one does not need to worry about interference
 effects when composing them. In particular, lazy evaluation affords to
 contruct complex programs by pipelining simple list transformation
-functions. Indeed, strict evaluation forces to fully reify each
-intermediate result between each computational step, while lazy
+functions. Indeed, while strict evaluation forces to fully reify each
+intermediate result between each computational step, lazy
 evaluation allows to run all the computations concurrently, often
-without ever allocating a single intermediate result in full.
+without ever allocating more that a single intermediate result at a time.
 
-Unfortunately, lazy evaluation suffers from two drawbacks. First, it
-does not extend nicely to effectful processing. That is, if (say) an
-input list is produced by reading a file lazily, one is exposed to
-losing referential transparency (as Kiselyov has shown). In practice,
-when using lazy IO, the point when a resource will be released depends
-on what happens in the context.
+Unfortunately, lazy evaluation suffers from two drawbacks.  First, it
+has unpredictable memory behaviour. Consider the following function
+composition:
 
-(In particular, exception handling is hard to get right.) 
-This context-dependency means that the compositionality principle cherished and touted by
-Hughes is lost.
+\begin{spec}
+f :: [a] -> [b]
+g :: [b] -> [c]
+h = g . f
+\end{spec}
 
-TODO: on this simple program it's not clear when (or if) the input stream is going to be closed.
-
-http://stackoverflow.com/questions/296792/haskell-io-and-closing-files
-
-> main = failure
-> 
-> func = do
->   input <- hGetContents stdin
->   writeFile "test1.txt" (unlines $ take 3 $ lines input)
-
-> failure = do
->   func
->   func
-
-The second issue with lazy evaluation is its memory behaviour. When
-composing list-processing functions f and g, one always hopes that the
-intermediate list will not be allocated. Unfortunately, this does not
-necessarily happen. Indeed, the production pattern of g must match the
-consumption pattern of f, otherwise buffering must occur. In practice,
+One rightly hopes that, at runtime, the intermediate list ($[b]$) list
+will only be allocated elementwise, as outlined above. Unfortunately,
+this desired behaviour does not necessarily happen. Indeed, a
+necessary condition is that the production pattern of $f$ matches the
+consumption pattern of $g$; otherwise buffering occurs. In practice,
 this means that a seemingly innocuous change in either of the function
 definitions may drastically change the memory behaviour of the
-composition. Again, the compositionality principle breaks down (if one
-cares about memory behaviour).
+composition, without warning. If one cares about memory behaviour,
+this means that the compositionality principle touted by Hughes breaks
+down.
+
+Second, lazy evaluation does not extend nicely to effectful
+processing. That is, if (say) an input list is produced by reading a
+file lazily, one is exposed to losing referential transparency (as
+Kiselyov {TODO cite} has shown). For example, one may rightfully
+expect that both following programs have the same behaviour, but the
+second one prints nothing\footnote{This expectation is expressed in a
+Stack Overflow question, accessible at this URL:
+http://stackoverflow.com/questions/296792/haskell-io-and-closing-files
+}:
+
+\begin{spec}
+main = do  inFile <- openFile "foo" ReadMode
+           contents <- hGetContents inFile
+           putStr contents
+           hClose inFile
+
+main = do  inFile <- openFile "foo" ReadMode
+           contents <- hGetContents inFile
+           hClose inFile
+           putStr contents
+\end{spec}
+
+Indeed, because \var{hGetContents} reads the file lazily, the \var{hClose}
+operation has the effect to truncate the list. In the first program,
+printing the contents force reading the file. One may argue that
+\var{hClose} should not be called in the first place, however closing the
+handle happens only when the \var{contents} list can be garbage
+collected (in full), but relying on garabage collection for cleaning
+resources is brittle, and compounds badly with the first issue
+discussed above.  Again, if one wants to use lazy effectful
+computations, the compositionality principle is lost.
 
 In this paper, we propose to tackle both of these problems, by means
 of a new representation for streams of data, and a convention on how
-to use streams. The convention to respect is linearity. In fact, the
+to use streams. The convention to respect is *linearity*. In fact, the
 ideas presented in this paper are heavily inspired by study of
 Girards' linear logic \cite{girard_linear_1987}, and one way to read
 this paper is as an advocacy for linear types support in Haskell.
 
-First. TODO
-
-Second.
 Using our solution, the composition of two stream processors is
 guaranteed not to allocate more memory than the sum of its components.
 If the stream behaviours do not match, the types will not match
-either. It will however be possible to add explicit buffering, which
-will adjust the types:
+either. It is however be possible to adjust the types by adding
+explicit buffering, in a natural manner:
 
 \begin{spec} h = f . buffer . g \end{spec}
 
+Furthermore, stream closing is predictable. Printing a can be
+implemented as follows:
+
+> main = fileSrc "foo" `forward` stdoutSnk
+
+In particular, if an exception occurs on \var{stdout}, the input file
+will be properly closed anyway.
 
 The contributions of this paper are
 
-* a re-interpretation of coroutine-based effectful computing, based on
+* A re-interpretation of coroutine-based effectful computing, based on
 a computational interpretation of linear logic, and
 
-* a Haskell library built on this approach. Besides supporting the
+* A Haskell library built on this approach. Besides supporting the
 compositionality principle as outlined above, it features two novel
 aspects:
 
   1. A more lightweight design than state-of-the-art co-routine based
-    libraries, affored by the linearity convention.
+    libraries, afforded by the linearity convention.
 
   2. Support for explicit buffering and control structures, while
     still respecting compositionality.
@@ -131,11 +153,12 @@ In this section we recall the basics of continuation-based
 programming. Readers familiar with continuations only need to read
 this section to pick up our notation.
 
-We begin by providing a type of effects. For users of the stream
-library, this type should remain abstract. However in this paper we
-will develop stream components. This is possible only if we pick a
-concrete type of effects. Because we will provide streams interacting
-with files, etc. we must pick \var{IO}.
+We begin by assuming a type of effects \var{Eff}. For users of the
+stream library, this type should remain abstract. However in this
+paper we will develop stream components, and this is possible only if
+we pick a concrete type of effects. Because we will provide streams
+interacting with files and other operating-system resources, we must
+pick $\var{Eff} = \var{IO} ()$.
 
 > type Eff = IO ()
 
@@ -149,15 +172,14 @@ A shortcut for double negations is also convenient.
 
 The basic idea (imported from classical logics) pervading this paper
 is that producing a result of type α is equivalent to consuming an
-argument of type $N α$. Dually, consuming an argument of type α is
+argument of type $N α$. (In this paper we call this equivalence the
+duality principle.) Dually, consuming an argument of type α is
 equivalent to producing a result of type $N α$.
 
 In classical logics, negation is involutive; that is:
-
 $NN a = a$
-
 However, because we work with an intuitionistic language (Haskell), we
-do not have this equality.  However, we can come close enough.
+do not have this equality.  We can come close enough though.
 
 First, double negations can always be introduced, using the
 \var{shift} operator.
@@ -190,7 +212,7 @@ single source and writing to a single sink will be given the following
 type:
 
 \begin{spec}
-simple :: Source a -> Sink a -> Eff
+simple :: Src a -> Snk a -> Eff
 \end{spec}
 
 We will make sure that \var{Sink} is the negation of a source (and vice
@@ -198,19 +220,21 @@ versa), and thus the type of the above program may equivalently have
 been written as follows:
 
 \begin{spec}
-simple :: Source a -> Source a
+simple :: Src a -> Src a
 \end{spec}
 
 However, having explicit access to \var{Sink}s allows us to (for example)
-dispatch a single source to mulitiple sinks. The presence of both
-types will also make us familiar with duality, which will be crucial
-in the later sections.
+dispatch a single source to mulitiple sinks, as in the following example:
+\begin{spec}
+unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
+\end{spec}
+The presence of both types will also make us familiar with duality,
+which will be crucial in the later sections of this paper.
 
 We will define sources and sinks by mutual recursion. Producing a
 source means to select if there we are out of data (\var{Nil}) or some
 more is available (\var{Cons}). If there is data, one must
 then produce a data item and *consume* a sink.
-
 
 > data Source' a   = Nil   | Cons a  (N (Sink' a))
 > data Sink' a     = Full  | Cont    (N (Source' a))
@@ -1166,4 +1190,17 @@ ScratchPad
 
 > emptyCh :: ChurchSrc a
 > emptyCh k = k $ CS $ \k' -> k' (Inl TT)
+
+TODO: on this simple program it's not clear when (or if) the input stream is going to be closed.
+
+
+> main = failure
+> 
+> func = do
+>   input <- hGetContents stdin
+>   writeFile "test1.txt" (unlines $ take 3 $ lines input)
+
+> failure = do
+>   func
+>   func
 
