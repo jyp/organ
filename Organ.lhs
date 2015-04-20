@@ -10,7 +10,7 @@
 > import Control.Applicative hiding (empty)
 > import Data.IORef
 > import Prelude hiding (tail)
-> import Control.Monad
+> -- import Control.Monad
 
 -->
 
@@ -64,7 +64,7 @@ g :: [b] -> [c]
 h = g . f
 \end{spec}
 
-One rightly hopes that, at runtime, the intermediate list ($[b]$) list
+One hopes that, at runtime, the intermediate list ($[b]$) list
 will only be allocated elementwise, as outlined above. Unfortunately,
 this desired behaviour does not necessarily happen. Indeed, a
 necessary condition is that the production pattern of $f$ matches the
@@ -96,7 +96,7 @@ main = do  inFile <- openFile "foo" ReadMode
            putStr contents
 \end{spec}
 
-Indeed, the putStr and hClose command act on unrelated resources, and
+Indeed, the \var{putStr} and \var{hClose} command act on unrelated resources, and
 thus swapping them should have no effect.  However, while the first
 program prints the `foo` file, the second one prints nothing.  Indeed,
 because \var{hGetContents} reads the file lazily, the \var{hClose}
@@ -239,8 +239,8 @@ source means to select if there we are out of data (\var{Nil}) or some
 more is available (\var{Cons}). If there is data, one must
 then produce a data item and *consume* a sink.
 
-> data Source' a   = Nil   | Cons a  (N (Sink' a))
-> data Sink' a     = Full  | Cont    (N (Source' a))
+> data Source'  a   = Nil   | Cons a  (N (Sink'    a))
+> data Sink'    a   = Full  | Cont    (N (Source'  a))
 
 Producing a sink means to select if one can accept more elements
 (\var{Cont}) or not (\var{Full}). In the former case, one must then be
@@ -351,13 +351,14 @@ All the following conversions are implementable:
 > shiftSnk k kk = kk (Cont k)
 > shiftSrc k kk = k (Cont kk)
 
-A different reading of the type of shiftSrc reveals that it implements
-forwarding of data from Src to Snk:
+A different reading of the type of \var{shiftSrc} reveals that it implements
+forwarding of data from \var{Src} to \var{Snk}:
 
 > forward :: Src a -> Snk a -> Eff
 > forward = shiftSrc
 
 TODO: flow
+TODO: flipSnk, flipSrc
 
 > dnintro :: Src a -> Src (NN a)
 > dnintro = mapSrc shift
@@ -366,13 +367,11 @@ TODO: flow
 > dndel' = mapSnk shift
 
 > dndel :: Src (NN a) -> Src a
-> dndel s Full = s Full
-> dndel s (Cont k) = s $ Cont $ dnintro' k
+> dndel = flipSnk dnintro'
 
 > dnintro' :: Snk a -> Snk (NN a)
 > dnintro' k Nil = k Nil
 > dnintro' k (Cons x xs) = x $ \x' -> k (Cons x' $ dndel xs)
-
 
 
 Examples: Effect-Free Streams
@@ -406,8 +405,6 @@ data. We could write the following:
 
 However, calling await may break linearity, so we will refrain to use
 \var{match} in the following.
-
-TODO: flipSnk, flipSrc
 
 Furthermore, both \var{Src} and \var{Snk} are functors and \var{Src}
 is a monad. The instances are somewhat involved, so we'll defer them
@@ -559,9 +556,7 @@ and \var{mapSnk} are defined by mutual recursion.
 >   = s1 (Cons a (forwardThenSrc s2 s))
 
 > forwardThenSrc :: Snk a -> Src a -> Src a
-> forwardThenSrc s2 s Full = forward s s2
-> forwardThenSrc s2 s (Cont s')
->   = s (Cont (appendSnk s' s2))
+> forwardThenSrc s2 = flipSnk (appendSnk s2)
 
 > appendSrc :: Src a -> Src a -> Src a
 > appendSrc s1 s2 Full = s1 Full >> s2 Full
@@ -574,9 +569,7 @@ and \var{mapSnk} are defined by mutual recursion.
 >   = snk (Cons a (appendSrc s src))
 
 > concatSrcSrc :: Src (Src a) -> Src a
-> concatSrcSrc ss Full = ss Full
-> concatSrcSrc ss (Cont s)
->   = ss (Cont (concatSnkSrc s))
+> concatSrcSrc = flipSnk concatSnkSrc
 
 > concatSnkSrc :: Snk a -> Snk (Src a)
 > concatSnkSrc snk Nil = snk Nil
@@ -608,9 +601,11 @@ consuption (and vice versa). However, one can buffer data by explicity
 buiding lists, if one so decides:
 
 > toList :: Src a -> NN [a]
-> toList k1 k2 = k1 $ Cont $ \src -> case src of
->    Nil -> k2 []
->    Cons x xs -> toList xs $ \xs' -> k2 (x:xs')
+> toList s k = shiftSrc s (toListSnk k)
+
+> toListSnk :: N [a] -> Snk a
+> toListSnk k Nil = k []
+> toListSnk k (Cons x xs) = toList xs $ \xs' -> k (x:xs')
 
 In sum, synchronicity restricts the kind of operations one can
 constructs, in exchange for two guarantees:
@@ -672,23 +667,22 @@ to pick fall on the consumer of the stream. What we need in this case
 is the so-called additive conjuction. It is the dual of the
 \var{Either} type: there is a choice, but it falls on the consumer
 rather than the producer of the data. Additive conjuction, written &,
-can be encoded using the deMorgan law:
-
-\begin{spec}
-not (a ⊕ b) = not a & not b
-\end{spec}
+can be encoded by inverting the flow of control before and after the
+intuitionistic disjunction (\var{Either}):
 
 > type a & b = N (Either (N a) (N b))
 
-We can then try to inhabit the following type:
+(One will recognize the similarity with the deMorgan law)
+
+We can then refine the type of multiplexing:
 
 > mux :: Src a -> Src b -> Src (a & b)
 
-Unfortunately, we still cannot implement multiplexing. Consider the
-following attempt, where we begin by asking the consumer if it desires
-$a$ or $b$. If the answer is $a$, we need to, we can extract a
-correponding value from \var{sa} and yield it; and symmetrically for
-$b$.
+Unfortunately, we still cannot implement multiplexing typed as
+above. Consider the following attempt, where we begin by asking the
+consumer if it desires $a$ or $b$. If the answer is $a$,
+we can extract a value from \var{sa} and yield it; and
+symmetrically for $b$.
 
 > mux sa sb (Cont tab) = tab $ Cons
 >                         (\ab -> case ab of
@@ -698,9 +692,9 @@ $b$.
 
 However, there is no way to then make a recursive call (???) to
 continue processing.  Indeed the recursive call to make must depend on
-the choice made by the consumer (using \var{resta} or
-\var{restb}). However the type of \var{Cons} forces us to produce its
-arguments independently.
+the choice made by the consumer (in one case we should be using
+\var{resta}, in the other \var{restb}). However the type of \var{Cons}
+forces us to produce its arguments independently.
 
 What we need to do is to reverse the control fully: we need a data
 source which is in control of the flow of execution.
@@ -725,7 +719,7 @@ Implementing multipexing on co-sources is then straightforward:
 We use the rest of the section to study the property of co-sources and
 co-sinks.
 
-CoSrc is a functor, and CoSnk is a contravariant functor.
+\var{CoSrc} is a functor, and \var{CoSnk} is a contravariant functor.
 
 > mapCoSrc :: (a -> b) -> CoSrc a -> CoSrc b
 > mapCoSrc f = mapSnk (\b' -> \a -> b' (f a))
@@ -736,16 +730,15 @@ CoSrc is a functor, and CoSnk is a contravariant functor.
 
 One access elements of a co-source only "one at a time". That is, one
 cannot extract the contents of a co-source as a list. Attempting to
-implement this extraction looks as follows. If one tries to begin by
-constructing the CoSrc (1), then there is no way to produce subsequent
-elements of the list. If one tries to begin by constructing the list,
-then no data is available.
+implement this extraction looks as follows.
 
-> toList' :: CoSrc a -> NN [a]
-> toList' k1 k2 = k1 $ Cons (\a -> k2 [a]) (error "rest")
-> toList' k1 k2 = k2 $ (error "a?") : (error "rest")
+> coToList :: CoSrc a -> NN [a]
+> coToList k1 k2 = k1 $ Cons (\a -> k2 [a]) (error "rest") -- (1)
+> coToList k1 k2 = k2 $ (error "a?") : (error "rest")      -- (2)
 
-
+If one tries to begin by constructing the CoSrc (1), then there is no
+way to produce subsequent elements of the list. If one tries to begin
+by constructing the list (2), then no data is available.
 Yet it is possible to define useful and effectful co-sources and
 co-sinks. The first example is providing a file as a co-source:
 
@@ -791,7 +784,6 @@ We have seen so far that synchronicity gives useful guarantees, but
 restricts the kind of programs one can write. In this section, we will
 provide primitives which allow forms of asynchronous programming using
 our framework.
-
 The main benefit of sticking to our framework in this case is that
 asynchronous behaviour is cornered to explicit usage of these
 primitives. That is, the benefits of synchronous programming still
@@ -1017,6 +1009,7 @@ fails as last resort:
 > weave (Sym k1) (Sym k2)
 >     = Sym (\s -> weave (k1 s) (k2 s))
 
+> (<|>) :: Parser s a -> Parser s a -> Parser s a
 > P p <|> P q = P (\fut -> weave (p fut) (q fut))
 
 
