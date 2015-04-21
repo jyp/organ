@@ -1258,20 +1258,25 @@ type Transducer m1 m2 e1 e2 = Producer m1 e1 -> Producer m2 e2
 \end{spec}
 
 
-Linear Types
-------------
+Session Types
+-------------
 
-The main choice which enables us to simplify the interface for our
-stream library is the linearity convention.
+In essence our pair of types for stream is an encoding of a protocol
+for data transmission. This protocol is readily expressible using
+linear types, following the ideas of TODO {Wadler 12, Pfenning and Caires}:
 
-
-
-Wadler 12, Pfenning and Caires.
-
-Stream is the direct translation of a linear type for a stream protocol:
-
+\begin{spec}
 Source a = 1 ⊕ (a ⊗ N (Sink a))
 Sink a = 1 ⊕ N (Source a)
+\end{spec}
+
+For the translation to Haskell, we have chosen to use a lightweight
+encoding, assuming linearity of effectful variables; arguing at the
+same time for support of linearity in future Haskell versions.  Yet,
+other encodings could be chosen. For example, we could have used the
+technique of Pucella and Tov (Haskell session types with almost no
+class), which does not require abiding to linearity.
+
 
 Parallelism ?
 ===========
