@@ -1340,6 +1340,15 @@ to be dealt with outside of the stream framework.
 Iteratees
 ---------
 
+The state of the art.
+
+Iteratees are parsers also.
+
+Iteratee is subject to the linearity convention as well: the type of
+iteratees is transparent, so users can in principle discard and
+duplicate continuations, thereby potentially duplicating or ignoring
+effects.
+
 > type ErrMsg = String
 > data Stream el = EOF (Maybe ErrMsg) | Chunk [el]
 
@@ -1352,6 +1361,8 @@ Iteratees
 >         Iteratee eli m a -> Iteratee elo m (Iteratee eli m a)
 
 \cite{kiselyov_iteratees_2012}
+
+> data I el m a = Done a | GetC (Maybe el -> m (I el m a))
 
 http://johnlato.blogspot.se/2012/06/understandings-of-iteratees.html
 
