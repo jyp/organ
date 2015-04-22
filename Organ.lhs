@@ -2,13 +2,14 @@
 
  <!--
 
-> {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms, BangPatterns #-}
+> {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms, BangPatterns, TypeSynonymInstances, FlexibleInstances  #-}
 > module Organ where
 > import System.IO
 > import Control.Exception
 > import Control.Concurrent (forkIO, readChan, writeChan, Chan, newChan)
 > import Control.Applicative hiding (empty)
 > import Data.IORef
+> import Data.Monoid
 > import Prelude hiding (tail)
 > -- import Control.Monad
 
@@ -475,10 +476,49 @@ A list of all possible effect-free functions is given in TODO.
 Algebraic structure
 -------------------
 
+\paragraph{Monoid}
+
+> instance Monoid (Src a) where
+>   mappend = appendSrc
+>   mempty = empty
+
+> instance Monoid (Snk a) where
+>   mappend = appendSnk
+>   mempty = plug
+
+
+TODO: check the monoid laws (unit, assoc).
+
+\begin{spec}
+
+plug <> x = x
+x <> plug = x
+
+empty <> x = x
+x <> empty = x
+
+
+(-) :: Snk a -> Src a -> Either (Src a) (Snk a)
+(-) = forwardThenSnk
+
+(-) :: Src a -> Snk a -> Src a
+(-) = forwardThenSrc
+
+
+t - (s1 <> s2) == (t - s1) - s2
+
+(t1 <> t2) - s == t1 - (t2 - s)
+
+\end{spec}
+
+
+\paragraph{Functor}
 We have already seen the mapping functions for sources and sinks:
 sources are functors and sinks are contravariant functors. (Given the
 implementation of the morphism actions it is straightforward to check
 the functor laws.)
+
+\paragraph{Monad}
 
 Besides, \var{Src} is a monad. The unit is trivial. The join operation
 is the concatenation of sources:
@@ -519,6 +559,9 @@ TODO: josef: guide through this implementation?
 >   = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
 
 TODO: is Snk a co-monad? Discuss.
+
+
+
 
 Effectful streams
 =================
@@ -702,7 +745,7 @@ type signature:
 
 \begin{spec}
 mux :: Src a -> Src b -> Src (Either a b)
-mux sa sb = _
+mux sa sb = ?
 \end{spec}
 
 We can try to fill the hole by reading on a source. However, if we do
@@ -997,8 +1040,13 @@ Therefore, when programming with streams, one should prefer to consume
 negative types and produce positive ones.
 
 
-Application: idealised echo server
-==================================
+Applications
+============
+
+Bigger examples.
+
+Idealised echo server
+---------------------
 
 
 The server will communicate with each client via two streams, one for
@@ -1048,12 +1096,12 @@ The server can then be given the following  definition.
 >                                   (collapseSnk o1 o2)
 
 
-Application: Stream-Based Parsing
-=================================
+Stream-Based Parsing
+--------------------
 
 The next application is a stream transformer which parses an input
 stream into structured chunks. This is useful for example to turn an
-xml file inputted as stream of characters into a stream of (opening
+XML file inputted as stream of characters into a stream of (opening
 and closing) tags.
 
 We beging by defining a pure parsing structure, modeled after the
@@ -1124,7 +1172,11 @@ the stream are closed.
 
 
 
-Table of transparent functions (implementable without reference to IO, preserving syncronicity)
+
+Table of transparent functions
+==============================
+
+(implementable without reference to IO, preserving syncronicity)
 
 > zipSrc :: Src a -> Src b -> Src (a,b)
 > zipSrc s1 s2 = unshiftSrc (\t -> unzipSnk t s1 s2)
