@@ -302,7 +302,7 @@ productions and consumptions on the stream.
 
 > fwd :: Source' a -> Sink' a -> Eff
 > fwd s (Cont s') = s' s
-> fwd Nil Full = return ()
+> fwd Nil Full = mempty
 > fwd (Cons _ xs) Full = xs Full
 
 One can send data to a sink. If the sink is full, the data is ignored.
@@ -471,7 +471,7 @@ be notified of its closing.
 > takeSrc i = flipSnk (takeSnk i)
 
 > takeSnk _ s Nil = s Nil
-> takeSnk 0 s (Cons _ s') = s Nil >> s' Full -- Subtle case
+> takeSnk 0 s (Cons _ s') = s Nil <> s' Full -- Subtle case
 > takeSnk i s (Cons a s') = s (Cons a (takeSrc (i-1) s'))
 
 
@@ -539,7 +539,7 @@ second source. This behaviour is implemented in the helper function
 \var{forwardThenSnk}.
 
 > appendSrc :: Src a -> Src a -> Src a
-> appendSrc s1 s2 Full = s1 Full >> s2 Full
+> appendSrc s1 s2 Full = s1 Full <> s2 Full
 > appendSrc s1 s2 (Cont s)
 >   = s1 (Cont (forwardThenSnk s s2))
 
@@ -558,7 +558,7 @@ Forward all the data from the source to the sink; the remainder sink is returned
 >   = src (Cont (concatAux snk s))
 
 > concatAux :: Snk a -> Src (Src a) -> Snk a
-> concatAux snk ssrc Nil = snk Nil >> ssrc Full
+> concatAux snk ssrc Nil = snk Nil <> ssrc Full
 > concatAux snk ssrc (Cons a s)
 >   = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
 
@@ -579,7 +579,7 @@ than producing them.
 TODO: When to talk about appendSink?
 
 > appendSnk :: Snk a -> Snk a -> Snk a
-> appendSnk s1 s2 Nil = s1 Nil >> s2 Nil
+> appendSnk s1 s2 Nil = s1 Nil <> s2 Nil
 > appendSnk s1 s2 (Cons a s)
 >   = s1 (Cons a (forwardThenSrc s2 s))
 
@@ -768,7 +768,7 @@ the stream are closed.
 >  where
 >   scan :: P s a -> Snk a -> Snk s
 >   scan (Result res _) ret        xs     = ret (Cons res $ parse q $ fwd xs)
->   scan Fail           ret        xs     = ret Nil >> fwd xs Full
+>   scan Fail           ret        xs     = ret Nil <> fwd xs Full
 >   scan (Sym f)        mres       xs     = case xs of
 >     Nil        -> scan (f Nothing) mres Nil
 >     Cons x cs  -> forward cs (scan (f $ Just x) mres)
@@ -823,13 +823,13 @@ of a source, by connecting it to two sinks.
 We can implement this demultiplexing operation as follows:
 
 > dmux :: Source' (Either a b) -> Sink' a -> Sink' b -> Eff
-> dmux Nil ta tb = fwd Nil ta >> fwd Nil tb
+> dmux Nil ta tb = fwd Nil ta <> fwd Nil tb
 > dmux (Cons ab c) ta tb = case ab of
 >   Left a -> c $ Cont $ \src' -> case ta of
->     Full -> fwd Nil tb >> plug src'
+>     Full -> fwd Nil tb <> plug src'
 >     Cont k -> k (Cons a $ \ta' -> dmux src' ta' tb)
 >   Right b -> c $ Cont $ \src' -> case tb of
->     Full -> fwd Nil ta >> plug src'
+>     Full -> fwd Nil ta <> plug src'
 >     Cont k -> k (Cons b $ \tb' -> dmux src' ta tb')
 
 > dmux' sab' ta' tb' =
@@ -1177,7 +1177,7 @@ sending by the followig function, which forwards everything sent to a
 sink to its two argument sinks.
 
 > collapseSnk :: Snk a -> Snk a -> Snk a
-> collapseSnk t1 t2 Nil = t1 Nil >> t2 Nil
+> collapseSnk t1 t2 Nil = t1 Nil <> t2 Nil
 > collapseSnk t1 t2 (Cons x xs)
 >   =  t1  (Cons x $ \c1 ->
 >      t2  (Cons x $ \c2 ->
@@ -1197,7 +1197,7 @@ The server can then be given the following  definition.
 
 
 Table of transparent functions
-==============================
+------------------------------
 
 (implementable without reference to IO, preserving syncronicity)
 
@@ -1212,9 +1212,9 @@ Unzip a sink (recieving data from parallel sources)
 > unzipSnk sab ta tb =
 >   shiftSrc ta $ \ta' ->
 >   case ta' of
->     Nil -> tb Full >> sab Nil
+>     Nil -> tb Full <> sab Nil
 >     Cons a as ->  shiftSrc tb $ \tb' ->  case tb' of
->       Nil -> as Full >> sab Nil
+>       Nil -> as Full <> sab Nil
 >       Cons b bs -> forward (cons (a,b) $ zipSrc as bs) sab
 
 Unzip a source (sending data to parallel sources)
@@ -1225,7 +1225,7 @@ Unzip a source (sending data to parallel sources)
 Zipping sinks
 
 > zipSnk :: Snk a -> Snk b -> Snk (a,b)
-> zipSnk sa sb Nil = sa Nil >> sb Nil
+> zipSnk sa sb Nil = sa Nil <> sb Nil
 > zipSnk sa sb (Cons (a,b) tab) = sa $ Cons a $ \sa' ->
 >                                 sb $ Cons b $ \sb' ->
 >                                 unzipSrc tab (flip fwd sa') (flip fwd sb')
@@ -1276,7 +1276,7 @@ Dual to \var{dropSrc}
 > fromList = foldr cons empty
 
 > enumFromToSrc :: Int -> Int -> Src Int
-> enumFromToSrc _ _ Full = return ()
+> enumFromToSrc _ _ Full = mempty
 > enumFromToSrc b e (Cont s)
 >   | b > e     = s Nil
 >   | otherwise = s (Cons b (enumFromToSrc (b+1) e))
@@ -1296,13 +1296,13 @@ Consume elements until the predicate is reached; then the sink is
 closed.
 
 > untilSnk :: (a -> Bool) -> Snk a
-> untilSnk _ Nil = return ()
+> untilSnk _ Nil = mempty
 > untilSnk p (Cons a s)
 >   | p a  = s Full
 >   | True = s (Cont (untilSnk p))
 
 > interleave :: Src a -> Src a -> Src a
-> interleave s1 s2 Full = s1 Full >> s2 Full
+> interleave s1 s2 Full = s1 Full <> s2 Full
 > interleave s1 s2 (Cont s) = s1 (Cont (interleaveSnk s s2))
 
 > interleaveSnk :: Snk a -> Src a -> Snk a
@@ -1454,6 +1454,7 @@ Parallelism ?
 > type Pull a = NN (Int -> a)
 > type Push a = N (Int -> N a)
 
+Bidirectional protocols. 
 
 Future Work
 ===========
