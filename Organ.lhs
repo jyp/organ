@@ -159,13 +159,17 @@ programming. Readers familiar with continuations only need to read
 this section to pick up our notation.
 
 We begin by assuming a type of effects \var{Eff}. For users of the
-stream library, this type should remain abstract. However in this
+stream library, this type should remain an abstract monoid. However in this
 paper we will develop stream components, and this is possible only if
 we pick a concrete type of effects. Because we will provide streams
 interacting with files and other operating-system resources, we must
 pick $\var{Eff} = \var{IO} ()$.
 
 > type Eff = IO ()
+
+> instance Monoid Eff where
+>   mempty = return ()
+>   mappend = (>>)
 
 We can then define negation as follows:
 
@@ -470,7 +474,10 @@ be notified of its closing.
 > takeSnk 0 s (Cons _ s') = s Nil >> s' Full -- Subtle case
 > takeSnk i s (Cons a s') = s (Cons a (takeSrc (i-1) s'))
 
-A list of all possible effect-free functions is given in TODO.
+
+
+A list of possible effect-free functions follows.
+
 
 
 Algebraic structure
@@ -486,30 +493,24 @@ Algebraic structure
 >   mappend = appendSnk
 >   mempty = plug
 
-
 TODO: check the monoid laws (unit, assoc).
 
-\begin{spec}
+\paragraph{Distributivity}
 
-plug <> x = x
-x <> plug = x
+> (-?) :: Snk a -> Src a -> Snk a
+> t -? s = forwardThenSnk t s
 
-empty <> x = x
-x <> empty = x
+> (-!) :: Snk a -> Src a -> Src a
+> t -! s = forwardThenSrc t s
+> 
+> infixr -!
+> infixl -?
 
+> prop_distr1 t s1 s2 = t -? (s1 <> s2) == t -? s1 -? s2
+> prop_distr2 t1 t2 s = (t1 <> t2) -? s == t1 -? (t2 -! s)
+> prop_distr3 t1 t2 s = (t1 <> t2) -! s == t1 -! (t2 -! s)
+> prop_distr4 t s1 s2 = t -! (s1 <> s2) == (t -? s1) -! s2
 
-(-) :: Snk a -> Src a -> Either (Src a) (Snk a)
-(-) = forwardThenSnk
-
-(-) :: Src a -> Snk a -> Src a
-(-) = forwardThenSrc
-
-
-t - (s1 <> s2) == (t - s1) - s2
-
-(t1 <> t2) - s == t1 - (t2 - s)
-
-\end{spec}
 
 
 \paragraph{Functor}
@@ -533,6 +534,8 @@ TODO: josef: guide through this implementation?
 > appendSnk s1 s2 (Cons a s)
 >   = s1 (Cons a (forwardThenSrc s2 s))
 
+Forward all the data from the source to the sink; the remainder source is returned
+
 > forwardThenSrc :: Snk a -> Src a -> Src a
 > forwardThenSrc s2 = flipSnk (appendSnk s2)
 
@@ -540,6 +543,8 @@ TODO: josef: guide through this implementation?
 > appendSrc s1 s2 Full = s1 Full >> s2 Full
 > appendSrc s1 s2 (Cont s)
 >   = s1 (Cont (forwardThenSnk s s2))
+
+Forward all the data from the source to the sink; the remainder sink is returned.
 
 > forwardThenSnk :: Snk a -> Src a -> Snk a
 > forwardThenSnk snk src Nil = forward src snk
@@ -670,6 +675,84 @@ In an industrial-strength implementation, one would probably have a
 field in both the \var{Nil} and \var{Full} constructors indicating the
 nature of the exception encountered, but we will not bother in the
 proof of concept implementation presented in this paper.
+
+
+
+App: Stream-Based Parsing
+-------------------------
+
+The next application is a stream transformer which parses an input
+stream into structured chunks. This is useful for example to turn an
+XML file inputted as stream of characters into a stream of (opening
+and closing) tags.
+
+We beging by defining a pure parsing structure, modeled after the
+parallel parsing processes of \citet{claessen_parallel_2004}.  The
+parser is continuation based, but the effects being accumulated are
+parsing processes, defined as follows. The Sym constructor parses just
+a symbol, or Nothing if the end of stream is reached. A process may
+also Fail or return a result (and continue).
+
+> data P s res  =  Sym (Maybe s -> P s res)
+>               |  Fail
+>               |  Result res (P s res)
+
+A parser producing $a$ the double negation of $a$:
+
+> newtype Parser s a = P (forall res. (a -> P s res) -> P s res)
+
+The monading interface can then be built using shift and unshift:
+
+> instance Monad (Parser s) where
+>   return x  = P $ \fut -> fut x
+>   P f >>= k = P (\fut -> f (\a -> let P g = k a in g fut))
+
+The essential parsing ingredient, disjunction, rests on the
+possibility to weave processes together, always picking that which
+fails as last resort:
+
+> weave :: P s a -> P s a -> P s a
+> weave Fail x = x
+> weave x Fail = x
+> weave (Result res x) y = Result res (weave x y)
+> weave x (Result res y) = Result res (weave x y)
+> weave (Sym k1) (Sym k2)
+>     = Sym (\s -> weave (k1 s) (k2 s))
+
+> (<|>) :: Parser s a -> Parser s a -> Parser s a
+> P p <|> P q = P (\fut -> weave (p fut) (q fut))
+
+
+ <!--
+
+> longestResultSnk :: forall a s. P s a -> N (Maybe a) -> Snk s
+> longestResultSnk p0 ret = scan p0 Nothing
+>  where
+>   scan :: P s a -> Maybe a -> Snk s
+>   scan (Result res p)  _         xs     = scan p (Just res) xs
+>   scan Fail           mres       xs     = ret mres >> fwd xs Full
+>   scan (Sym f)        mres       xs     = case xs of
+>     Nil        -> scan (f Nothing) mres Nil
+>     Cons x cs  -> forward cs (scan (f $ Just x) mres)
+
+-->
+
+Parsing then reconciles the execution of the process with the
+traversal of the source. In particular, whenever a result is
+encountered, it is fed to the sink. If the parser fails, both ends of
+the stream are closed.
+
+> parse :: forall s a. Parser s a -> Src s -> Src a
+> parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x Fail
+>  where
+>   scan :: P s a -> Snk a -> Snk s
+>   scan (Result res _) ret        xs     = ret (Cons res $ parse q $ fwd xs)
+>   scan Fail           ret        xs     = ret Nil >> fwd xs Full
+>   scan (Sym f)        mres       xs     = case xs of
+>     Nil        -> scan (f Nothing) mres Nil
+>     Cons x cs  -> forward cs (scan (f $ Just x) mres)
+
+
 
 
 Synchronicity and Asynchronicity
@@ -1006,18 +1089,17 @@ serve as buffer:
 >   forkIO $ forward (varCoSnk c) f
 >   varSrc c g
 
-All the above bufferings work on sources, but they can be generically
+All the above buffering operations work on sources, but they can be generically
 inverted to work on sinks, as follows.
 
-> type Buffering = forall a. CoSrc a -> Src a
-> swapBuffer :: Buffering -> Snk b -> CoSnk b
-> swapBuffer f s = f (dnintro' s)
+> flipBuffer :: (forall a. CoSrc a -> Src a) -> Snk b -> CoSnk b
+> flipBuffer f s = f (dnintro' s)
 
 
 Summary
 -------
 
-In sum, when considering the control behaviour of streams, we have two polarities:
+In sum, we can classify streams according to polarity:
 
 - Positive: source and co-sinks
 - Negative: sinks and co-sources
@@ -1039,13 +1121,7 @@ may occur.
 Therefore, when programming with streams, one should prefer to consume
 negative types and produce positive ones.
 
-
-Applications
-============
-
-Bigger examples.
-
-Idealised echo server
+App: idealised echo server
 ---------------------
 
 
@@ -1096,80 +1172,6 @@ The server can then be given the following  definition.
 >                                   (collapseSnk o1 o2)
 
 
-Stream-Based Parsing
---------------------
-
-The next application is a stream transformer which parses an input
-stream into structured chunks. This is useful for example to turn an
-XML file inputted as stream of characters into a stream of (opening
-and closing) tags.
-
-We beging by defining a pure parsing structure, modeled after the
-parallel parsing processes of \citet{claessen_parallel_2004}.  The
-parser is continuation based, but the effects being accumulated are
-parsing processes, defined as follows. The Sym constructor parses just
-a symbol, or Nothing if the end of stream is reached. A process may
-also Fail or return a result (and continue).
-
-> data P s res  =  Sym (Maybe s -> P s res)
->               |  Fail
->               |  Result res (P s res)
-
-A parser producing $a$ the double negation of $a$:
-
-> newtype Parser s a = P (forall res. (a -> P s res) -> P s res)
-
-The monading interface can then be built using shift and unshift:
-
-> instance Monad (Parser s) where
->   return x  = P $ \fut -> fut x
->   P f >>= k = P (\fut -> f (\a -> let P g = k a in g fut))
-
-The essential parsing ingredient, disjunction, rests on the
-possibility to weave processes together, always picking that which
-fails as last resort:
-
-> weave :: P s a -> P s a -> P s a
-> weave Fail x = x
-> weave x Fail = x
-> weave (Result res x) y = Result res (weave x y)
-> weave x (Result res y) = Result res (weave x y)
-> weave (Sym k1) (Sym k2)
->     = Sym (\s -> weave (k1 s) (k2 s))
-
-> (<|>) :: Parser s a -> Parser s a -> Parser s a
-> P p <|> P q = P (\fut -> weave (p fut) (q fut))
-
-
- <!--
-
-> longestResultSnk :: forall a s. P s a -> N (Maybe a) -> Snk s
-> longestResultSnk p0 ret = scan p0 Nothing
->  where
->   scan :: P s a -> Maybe a -> Snk s
->   scan (Result res p)  _         xs     = scan p (Just res) xs
->   scan Fail           mres       xs     = ret mres >> fwd xs Full
->   scan (Sym f)        mres       xs     = case xs of
->     Nil        -> scan (f Nothing) mres Nil
->     Cons x cs  -> forward cs (scan (f $ Just x) mres)
-
--->
-
-Parsing then reconciles the execution of the process with the
-traversal of the source. In particular, whenever a result is
-encountered, it is fed to the sink. If the parser fails, both ends of
-the stream are closed.
-
-> parse :: forall s a. Parser s a -> Src s -> Src a
-> parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x Fail
->  where
->   scan :: P s a -> Snk a -> Snk s
->   scan (Result res _) ret        xs     = ret (Cons res $ parse q $ fwd xs)
->   scan Fail           ret        xs     = ret Nil >> fwd xs Full
->   scan (Sym f)        mres       xs     = case xs of
->     Nil        -> scan (f Nothing) mres Nil
->     Cons x cs  -> forward cs (scan (f $ Just x) mres)
-
 
 
 
@@ -1178,8 +1180,12 @@ Table of transparent functions
 
 (implementable without reference to IO, preserving syncronicity)
 
+Zip two sources:
+
 > zipSrc :: Src a -> Src b -> Src (a,b)
 > zipSrc s1 s2 = unshiftSrc (\t -> unzipSnk t s1 s2)
+
+Unzip a sink (recieving data from parallel sources)
 
 > unzipSnk :: Snk (a,b) -> Src a -> Src b -> Eff
 > unzipSnk sab ta tb =
@@ -1190,8 +1196,12 @@ Table of transparent functions
 >       Nil -> as Full >> sab Nil
 >       Cons b bs -> forward (cons (a,b) $ zipSrc as bs) sab
 
+Unzip a source (sending data to parallel sources)
+
 > unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
 > unzipSrc sab ta tb = shiftSnk (zipSnk ta tb) sab
+
+Zipping sinks
 
 > zipSnk :: Snk a -> Snk b -> Snk (a,b)
 > zipSnk sa sb Nil = sa Nil >> sb Nil
@@ -1199,13 +1209,19 @@ Table of transparent functions
 >                                 sb $ Cons b $ \sb' ->
 >                                 unzipSrc tab (flip fwd sa') (flip fwd sb')
 
+Equivalent of \var{scanl'} for sources
+
 > scanSrc :: (b -> a -> b) -> b -> Src a -> Src b
 > scanSrc f !z = flipSnk (scanSnk f z)
+
+Dual to \var{scanSrc}
 
 > scanSnk :: (b -> a -> b) -> b -> Snk b -> Snk a
 > scanSnk _ _ snk Nil          = snk Nil
 > scanSnk f z snk (Cons a s)   = snk $ Cons next $ scanSrc f next s
 >   where next = f z a
+
+Equivalent of \var{foldl'} for sources
 
 > foldSrc' :: (b -> a -> b) -> b -> Src a -> NN b
 > foldSrc' f !z s nb = s (Cont (foldSnk' f z nb))
@@ -1222,13 +1238,18 @@ source is empty.
 >   Nil -> k x
 >   Cons x' cs -> lastSrc x' cs k
 
+Drop some elements from a sources
+
 > dropSrc :: Int -> Src a -> Src a
 > dropSrc i = flipSnk (dropSnk i)
+
+Dual to \var{dropSrc}
 
 > dropSnk :: Int -> Snk a -> Snk a
 > dropSnk 0 s s' = s s'
 > dropSnk _ s Nil = s Nil
 > dropSnk i s (Cons _ s') = shiftSrc (dropSrc (i-1) s') s
+
 
 > fromList :: [a] -> Src a
 > fromList = foldr cons empty
@@ -1267,11 +1288,18 @@ closed.
 > interleaveSnk snk src Nil = forward src snk
 > interleaveSnk snk src (Cons a s) = snk (Cons a (interleave s src))
 
+Forward data coming from the input source to the result source and to
+the second argument sink.
+
 > tee :: Src a -> Snk a -> Src a
 > tee s1 t1 = flipSnk (collapseSnk t1) s1
 
+Filter a source
+
 > filterSrc :: (a -> Bool) -> Src a -> Src a
 > filterSrc p = flipSnk (filterSnk p)
+
+Dual to \var{filterSrc}
 
 > filterSnk :: (a -> Bool) -> Snk a -> Snk a
 > filterSnk _ snk Nil = snk Nil
@@ -1344,25 +1372,22 @@ The state of the art.
 
 Iteratees are parsers also.
 
-Iteratee is subject to the linearity convention as well: the type of
+Iteratee is subject to the linearity convention as well:
+
+the type of
 iteratees is transparent, so users can in principle discard and
 duplicate continuations, thereby potentially duplicating or ignoring
 effects.
 
-> type ErrMsg = String
-> data Stream el = EOF (Maybe ErrMsg) | Chunk [el]
 
-> data Iteratee el m a  = IE_done a
->                       | IE_cont  (Maybe ErrMsg)
->                                  (Stream el -> m (Iteratee el m a, Stream el))
->
-> type Enumerator el m a = Iteratee el m a -> m (Iteratee el m a)
-> type Enumeratee elo eli m a =
->         Iteratee eli m a -> Iteratee elo m (Iteratee eli m a)
 
 \cite{kiselyov_iteratees_2012}
 
-> data I el m a = Done a | GetC (Maybe el -> m (I el m a))
+> data I s m a = Done a | GetC (Maybe s -> m (I s m a))
+> 
+> type Enumerator el m a = I el m a -> m (I el m a)
+> type Enumeratee elo eli m a =
+>         I eli m a -> I elo m (I eli m a)
 
 http://johnlato.blogspot.se/2012/06/understandings-of-iteratees.html
 
