@@ -159,11 +159,12 @@ programming. Readers familiar with continuations only need to read
 this section to pick up our notation.
 
 We begin by assuming a type of effects \var{Eff}. For users of the
-stream library, this type should remain an abstract monoid. However in this
-paper we will develop stream components, and this is possible only if
-we pick a concrete type of effects. Because we will provide streams
-interacting with files and other operating-system resources, we must
-pick $\var{Eff} = \var{IO} ()$.
+stream library, this type should remain an abstract monoid. However in
+this paper we will develop concrete effectful streams, and this is
+possible only if we pick a concrete type of effects. Because we will
+provide streams interacting with files and other operating-system
+resources, we must pick $\var{Eff} = \var{IO} ()$, and ensure that
+\var{Eff} can be treated as a monoid.
 
 > type Eff = IO ()
 
@@ -181,15 +182,14 @@ A shortcut for double negations is also convenient.
 
 The basic idea (imported from classical logics) pervading this paper
 is that producing a result of type α is equivalent to consuming an
-argument of type $N α$. (In this paper we call this equivalence the
-duality principle.) Dually, consuming an argument of type α is
-equivalent to producing a result of type $N α$.
+argument of type $N α$. Dually, consuming an argument of type α is
+equivalent to producing a result of type $N α$. In this paper we call
+these equivalences the duality principle.
 
 In classical logics, negation is involutive; that is:
-$NN a = a$
+$\var{NN}\,a = a$
 However, because we work with an intuitionistic language (Haskell), we
 do not have this equality.  We can come close enough though.
-
 First, double negations can always be introduced, using the
 \var{shift} operator.
 
@@ -233,7 +233,7 @@ simple :: Src a -> Src a
 \end{spec}
 
 However, having explicit access to \var{Sink}s allows us to (for example)
-dispatch a single source to mulitiple sinks, as in the following example:
+dispatch a single source to mulitiple sinks, as in the following type signature:
 \begin{spec}
 unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
 \end{spec}
@@ -241,9 +241,9 @@ The presence of both types will also make us familiar with duality,
 which will be crucial in the later sections of this paper.
 
 We will define sources and sinks by mutual recursion. Producing a
-source means to select if there we are out of data (\var{Nil}) or some
-more is available (\var{Cons}). If there is data, one must
-then produce a data item and *consume* a sink.
+source means to select if some more is available (\var{Cons}) or not
+(\var{Nil}). If there is data, one must then produce a data item and
+*consume* a sink.
 
 > data Source'  a   = Nil   | Cons a  (N (Sink'    a))
 > data Sink'    a   = Full  | Cont    (N (Source'  a))
@@ -593,7 +593,7 @@ Effectful streams
 =================
 
 So far, we have constructed only effect-free streams. That is, the
-fact that $Eff = IO ()$ was never used. In this section we fill this
+equality $\var{Eff} = \var{IO} ()$ was never used. In this section we bridge this
 gap and provide some useful sources and sinks performing input or
 output.
 
@@ -710,9 +710,9 @@ and closing) tags.
 We beging by defining a pure parsing structure, modeled after the
 parallel parsing processes of \citet{claessen_parallel_2004}.  The
 parser is continuation based, but the effects being accumulated are
-parsing processes, defined as follows. The Sym constructor parses just
-a symbol, or Nothing if the end of stream is reached. A process may
-also Fail or return a result (and continue).
+parsing processes, defined as follows. The \var{Sym} constructor parses just
+a symbol, or \var{Nothing} if the end of stream is reached. A process may
+also \var{Fail} or return a \var{Result} (and continue).
 
 > data P s res  =  Sym (Maybe s -> P s res)
 >               |  Fail
