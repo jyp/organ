@@ -159,11 +159,12 @@ programming. Readers familiar with continuations only need to read
 this section to pick up our notation.
 
 We begin by assuming a type of effects \var{Eff}. For users of the
-stream library, this type should remain an abstract monoid. However in this
-paper we will develop stream components, and this is possible only if
-we pick a concrete type of effects. Because we will provide streams
-interacting with files and other operating-system resources, we must
-pick $\var{Eff} = \var{IO} ()$.
+stream library, this type should remain an abstract monoid. However in
+this paper we will develop concrete effectful streams, and this is
+possible only if we pick a concrete type of effects. Because we will
+provide streams interacting with files and other operating-system
+resources, we must pick $\var{Eff} = \var{IO} ()$, and ensure that
+\var{Eff} can be treated as a monoid.
 
 > type Eff = IO ()
 
@@ -181,15 +182,14 @@ A shortcut for double negations is also convenient.
 
 The basic idea (imported from classical logics) pervading this paper
 is that producing a result of type α is equivalent to consuming an
-argument of type $N α$. (In this paper we call this equivalence the
-duality principle.) Dually, consuming an argument of type α is
-equivalent to producing a result of type $N α$.
+argument of type $N α$. Dually, consuming an argument of type α is
+equivalent to producing a result of type $N α$. In this paper we call
+these equivalences the duality principle.
 
 In classical logics, negation is involutive; that is:
-$NN a = a$
+$\var{NN}\,a = a$
 However, because we work with an intuitionistic language (Haskell), we
 do not have this equality.  We can come close enough though.
-
 First, double negations can always be introduced, using the
 \var{shift} operator.
 
@@ -233,7 +233,7 @@ simple :: Src a -> Src a
 \end{spec}
 
 However, having explicit access to \var{Sink}s allows us to (for example)
-dispatch a single source to mulitiple sinks, as in the following example:
+dispatch a single source to mulitiple sinks, as in the following type signature:
 \begin{spec}
 unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
 \end{spec}
@@ -241,9 +241,9 @@ The presence of both types will also make us familiar with duality,
 which will be crucial in the later sections of this paper.
 
 We will define sources and sinks by mutual recursion. Producing a
-source means to select if there we are out of data (\var{Nil}) or some
-more is available (\var{Cons}). If there is data, one must
-then produce a data item and *consume* a sink.
+source means to select if some more is available (\var{Cons}) or not
+(\var{Nil}). If there is data, one must then produce a data item and
+*consume* a sink.
 
 > data Source'  a   = Nil   | Cons a  (N (Sink'    a))
 > data Sink'    a   = Full  | Cont    (N (Source'  a))
@@ -302,7 +302,7 @@ productions and consumptions on the stream.
 
 > fwd :: Source' a -> Sink' a -> Eff
 > fwd s (Cont s') = s' s
-> fwd Nil Full = return ()
+> fwd Nil Full = mempty
 > fwd (Cons _ xs) Full = xs Full
 
 One can send data to a sink. If the sink is full, the data is ignored.
@@ -471,7 +471,7 @@ be notified of its closing.
 > takeSrc i = flipSnk (takeSnk i)
 
 > takeSnk _ s Nil = s Nil
-> takeSnk 0 s (Cons _ s') = s Nil >> s' Full -- Subtle case
+> takeSnk 0 s (Cons _ s') = s Nil <> s' Full -- Subtle case
 > takeSnk i s (Cons a s') = s (Cons a (takeSrc (i-1) s'))
 
 
@@ -556,6 +556,28 @@ Besides, \var{Src} is a monad. The unit is trivial. The join operation
 is the concatenation of sources:
 
 > concatSrcSrc :: Src (Src a) -> Src a
+
+Before implementing concatenation we will first implement append as it
+is both independently useful and important when defining
+concatenation.
+
+Intuitively \var{appendSrc} first gives control to the first source
+until it runs out of elements and then turns control over to the
+second source. This behaviour is implemented in the helper function
+\var{forwardThenSnk}.
+
+> appendSrc :: Src a -> Src a -> Src a
+> appendSrc s1 s2 Full = s1 Full <> s2 Full
+> appendSrc s1 s2 (Cont s)
+>   = s1 (Cont (forwardThenSnk s s2))
+
+Forward all the data from the source to the sink; the remainder sink is returned.
+
+> forwardThenSnk :: Snk a -> Src a -> Snk a
+> forwardThenSnk snk src Nil = forward src snk
+> forwardThenSnk snk src (Cons a s)
+>   = snk (Cons a (appendSrc s src))
+
 > concatSrcSrc = flipSnk concatSnkSrc
 
 > concatSnkSrc :: Snk a -> Snk (Src a)
@@ -564,7 +586,7 @@ is the concatenation of sources:
 >   = src (Cont (concatAux snk s))
 
 > concatAux :: Snk a -> Src (Src a) -> Snk a
-> concatAux snk ssrc Nil = snk Nil >> ssrc Full
+> concatAux snk ssrc Nil = snk Nil <> ssrc Full
 > concatAux snk ssrc (Cons a s)
 >   = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
 
@@ -653,7 +675,7 @@ Effectful streams
 =================
 
 So far, we have constructed only effect-free streams. That is, the
-fact that $Eff = IO ()$ was never used. In this section we fill this
+equality $\var{Eff} = \var{IO} ()$ was never used. In this section we bridge this
 gap and provide some useful sources and sinks performing input or
 output.
 
@@ -770,9 +792,9 @@ and closing) tags.
 We beging by defining a pure parsing structure, modeled after the
 parallel parsing processes of \citet{claessen_parallel_2004}.  The
 parser is continuation based, but the effects being accumulated are
-parsing processes, defined as follows. The Sym constructor parses just
-a symbol, or Nothing if the end of stream is reached. A process may
-also Fail or return a result (and continue).
+parsing processes, defined as follows. The \var{Sym} constructor parses just
+a symbol, or \var{Nothing} if the end of stream is reached. A process may
+also \var{Fail} or return a \var{Result} (and continue).
 
 > data P s res  =  Sym (Maybe s -> P s res)
 >               |  Fail
@@ -828,7 +850,7 @@ the stream are closed.
 >  where
 >   scan :: P s a -> Snk a -> Snk s
 >   scan (Result res _) ret        xs     = ret (Cons res $ parse q $ fwd xs)
->   scan Fail           ret        xs     = ret Nil >> fwd xs Full
+>   scan Fail           ret        xs     = ret Nil <> fwd xs Full
 >   scan (Sym f)        mres       xs     = case xs of
 >     Nil        -> scan (f Nothing) mres Nil
 >     Cons x cs  -> forward cs (scan (f $ Just x) mres)
@@ -883,13 +905,13 @@ of a source, by connecting it to two sinks.
 We can implement this demultiplexing operation as follows:
 
 > dmux :: Source' (Either a b) -> Sink' a -> Sink' b -> Eff
-> dmux Nil ta tb = fwd Nil ta >> fwd Nil tb
+> dmux Nil ta tb = fwd Nil ta <> fwd Nil tb
 > dmux (Cons ab c) ta tb = case ab of
 >   Left a -> c $ Cont $ \src' -> case ta of
->     Full -> fwd Nil tb >> plug src'
+>     Full -> fwd Nil tb <> plug src'
 >     Cont k -> k (Cons a $ \ta' -> dmux src' ta' tb)
 >   Right b -> c $ Cont $ \src' -> case tb of
->     Full -> fwd Nil ta >> plug src'
+>     Full -> fwd Nil ta <> plug src'
 >     Cont k -> k (Cons b $ \tb' -> dmux src' ta tb')
 
 > dmux' sab' ta' tb' =
@@ -1237,7 +1259,7 @@ sending by the followig function, which forwards everything sent to a
 sink to its two argument sinks.
 
 > collapseSnk :: Snk a -> Snk a -> Snk a
-> collapseSnk t1 t2 Nil = t1 Nil >> t2 Nil
+> collapseSnk t1 t2 Nil = t1 Nil <> t2 Nil
 > collapseSnk t1 t2 (Cons x xs)
 >   =  t1  (Cons x $ \c1 ->
 >      t2  (Cons x $ \c2 ->
@@ -1257,7 +1279,7 @@ The server can then be given the following  definition.
 
 
 Table of transparent functions
-==============================
+------------------------------
 
 (implementable without reference to IO, preserving syncronicity)
 
@@ -1272,9 +1294,9 @@ Unzip a sink (recieving data from parallel sources)
 > unzipSnk sab ta tb =
 >   shiftSrc ta $ \ta' ->
 >   case ta' of
->     Nil -> tb Full >> sab Nil
+>     Nil -> tb Full <> sab Nil
 >     Cons a as ->  shiftSrc tb $ \tb' ->  case tb' of
->       Nil -> as Full >> sab Nil
+>       Nil -> as Full <> sab Nil
 >       Cons b bs -> forward (cons (a,b) $ zipSrc as bs) sab
 
 Unzip a source (sending data to parallel sources)
@@ -1285,7 +1307,7 @@ Unzip a source (sending data to parallel sources)
 Zipping sinks
 
 > zipSnk :: Snk a -> Snk b -> Snk (a,b)
-> zipSnk sa sb Nil = sa Nil >> sb Nil
+> zipSnk sa sb Nil = sa Nil <> sb Nil
 > zipSnk sa sb (Cons (a,b) tab) = sa $ Cons a $ \sa' ->
 >                                 sb $ Cons b $ \sb' ->
 >                                 unzipSrc tab (flip fwd sa') (flip fwd sb')
@@ -1336,7 +1358,7 @@ Dual to \var{dropSrc}
 > fromList = foldr cons empty
 
 > enumFromToSrc :: Int -> Int -> Src Int
-> enumFromToSrc _ _ Full = return ()
+> enumFromToSrc _ _ Full = mempty
 > enumFromToSrc b e (Cont s)
 >   | b > e     = s Nil
 >   | otherwise = s (Cons b (enumFromToSrc (b+1) e))
@@ -1356,13 +1378,13 @@ Consume elements until the predicate is reached; then the sink is
 closed.
 
 > untilSnk :: (a -> Bool) -> Snk a
-> untilSnk _ Nil = return ()
+> untilSnk _ Nil = mempty
 > untilSnk p (Cons a s)
 >   | p a  = s Full
 >   | True = s (Cont (untilSnk p))
 
 > interleave :: Src a -> Src a -> Src a
-> interleave s1 s2 Full = s1 Full >> s2 Full
+> interleave s1 s2 Full = s1 Full <> s2 Full
 > interleave s1 s2 (Cont s) = s1 (Cont (interleaveSnk s s2))
 
 > interleaveSnk :: Snk a -> Src a -> Snk a
@@ -1514,6 +1536,7 @@ Parallelism ?
 > type Pull a = NN (Int -> a)
 > type Push a = N (Int -> N a)
 
+Bidirectional protocols. 
 
 Future Work
 ===========
