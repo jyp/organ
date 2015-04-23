@@ -483,6 +483,9 @@ A list of possible effect-free functions follows.
 Algebraic structure
 -------------------
 
+Sources and sinks are instances of several common algrebraic
+structures.
+
 \paragraph{Monoid}
 
 > instance Monoid (Src a) where
@@ -524,20 +527,16 @@ the functor laws.)
 Besides, \var{Src} is a monad. The unit is trivial. The join operation
 is the concatenation of sources:
 
-TODO: josef: guide through this implementation?
-
 > concatSrcSrc :: Src (Src a) -> Src a
 
+Before implementing concatenation we will first implement append as it
+is both independently useful and important when defining
+concatenation.
 
-> appendSnk :: Snk a -> Snk a -> Snk a
-> appendSnk s1 s2 Nil = s1 Nil >> s2 Nil
-> appendSnk s1 s2 (Cons a s)
->   = s1 (Cons a (forwardThenSrc s2 s))
-
-Forward all the data from the source to the sink; the remainder source is returned
-
-> forwardThenSrc :: Snk a -> Src a -> Src a
-> forwardThenSrc s2 = flipSnk (appendSnk s2)
+Intuitively \var{appendSrc} first gives control to the first source
+until it runs out of elements and then turns control over to the
+second source. This behaviour is implemented in the helper function
+\var{forwardThenSnk}.
 
 > appendSrc :: Src a -> Src a -> Src a
 > appendSrc s1 s2 Full = s1 Full >> s2 Full
@@ -563,7 +562,29 @@ Forward all the data from the source to the sink; the remainder sink is returned
 > concatAux snk ssrc (Cons a s)
 >   = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
 
-TODO: is Snk a co-monad? Discuss.
+Given the duality between sources and sinks, and the fact that sources
+are monads, it might be tempting to draw the conclusion that sinks are
+comonads. This is not the case. To see why, consider that every
+comonad has a counit, which, in the case for sinks, would have the
+following type
+
+\begin{spec}
+Snk a -> a
+\end{spec}
+
+There is no way to implement this function since sinks don't store
+elements so that they can be returned. Sinks consume elements rather
+than producing them.
+
+TODO: When to talk about appendSink?
+
+> appendSnk :: Snk a -> Snk a -> Snk a
+> appendSnk s1 s2 Nil = s1 Nil >> s2 Nil
+> appendSnk s1 s2 (Cons a s)
+>   = s1 (Cons a (forwardThenSrc s2 s))
+
+> forwardThenSrc :: Snk a -> Src a -> Src a
+> forwardThenSrc s2 = flipSnk (appendSnk s2)
 
 
 
