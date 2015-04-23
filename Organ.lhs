@@ -486,7 +486,35 @@ Algebraic structure
 Sources and sinks are instances of several common algrebraic
 structures.
 
-\paragraph{Monoid}
+\paragraph{Monoid} Source and sinks can be appended. Intuitively
+\var{appendSrc} first gives control to the first source until it runs
+out of elements and then turns control over to the second source. This
+behaviour is implemented in the helper function \var{forwardThenSnk}.
+
+> appendSrc :: Src a -> Src a -> Src a
+> appendSrc s1 s2 Full = s1 Full >> s2 Full
+> appendSrc s1 s2 (Cont s)
+>   = s1 (Cont (forwardThenSnk s s2))
+
+Forward all the data from the source to the sink; the remainder sink is returned.
+
+> forwardThenSnk :: Snk a -> Src a -> Snk a
+> forwardThenSnk snk src Nil = forward src snk
+> forwardThenSnk snk src (Cons a s)
+>   = snk (Cons a (appendSrc s src))
+
+Sinks can be appended is a similar fasion.
+
+> appendSnk :: Snk a -> Snk a -> Snk a
+> appendSnk s1 s2 Nil = s1 Nil >> s2 Nil
+> appendSnk s1 s2 (Cons a s)
+>   = s1 (Cons a (forwardThenSrc s2 s))
+
+> forwardThenSrc :: Snk a -> Src a -> Src a
+> forwardThenSrc s2 = flipSnk (appendSnk s2)
+
+Appending makes sources and sinks form monoids with \var{empty} and
+\var{plug} as the unit elements.
 
 > instance Monoid (Src a) where
 >   mappend = appendSrc
@@ -528,28 +556,6 @@ Besides, \var{Src} is a monad. The unit is trivial. The join operation
 is the concatenation of sources:
 
 > concatSrcSrc :: Src (Src a) -> Src a
-
-Before implementing concatenation we will first implement append as it
-is both independently useful and important when defining
-concatenation.
-
-Intuitively \var{appendSrc} first gives control to the first source
-until it runs out of elements and then turns control over to the
-second source. This behaviour is implemented in the helper function
-\var{forwardThenSnk}.
-
-> appendSrc :: Src a -> Src a -> Src a
-> appendSrc s1 s2 Full = s1 Full >> s2 Full
-> appendSrc s1 s2 (Cont s)
->   = s1 (Cont (forwardThenSnk s s2))
-
-Forward all the data from the source to the sink; the remainder sink is returned.
-
-> forwardThenSnk :: Snk a -> Src a -> Snk a
-> forwardThenSnk snk src Nil = forward src snk
-> forwardThenSnk snk src (Cons a s)
->   = snk (Cons a (appendSrc s src))
-
 > concatSrcSrc = flipSnk concatSnkSrc
 
 > concatSnkSrc :: Snk a -> Snk (Src a)
@@ -576,16 +582,70 @@ There is no way to implement this function since sinks don't store
 elements so that they can be returned. Sinks consume elements rather
 than producing them.
 
-TODO: When to talk about appendSink?
+\paragraph{Divisible and Decidable}
 
-> appendSnk :: Snk a -> Snk a -> Snk a
-> appendSnk s1 s2 Nil = s1 Nil >> s2 Nil
-> appendSnk s1 s2 (Cons a s)
->   = s1 (Cons a (forwardThenSrc s2 s))
+ <!--
 
-> forwardThenSrc :: Snk a -> Src a -> Src a
-> forwardThenSrc s2 = flipSnk (appendSnk s2)
+> data Void
 
+> class Contravariant f where
+>   contramap :: (b -> a) -> f a -> f b
+
+> instance Contravariant Snk where
+>   contramap = mapSnk
+
+
+> sinkToSnk :: Sink' a -> Snk a
+> sinkToSnk Full Nil = return ()
+> sinkToSnk Full (Cons a n) = n Full
+> sinkToSnk (Cont f) s = f s
+
+-->
+
+If sinks are not comonads, are there some other structures that they
+implement? The package contravariant on hackage gives two classes;
+\var{Divisible} and \var{Decidable\, which are superclasses of
+\var{Contravariant}, a class for contravariant functors. They are
+defined as follows:
+
+> class Contravariant f => Divisible f where
+>   divide :: (a -> (b, c)) -> f b -> f c -> f a
+>   conquer :: f a
+
+The method \var{divide} can be seen as a dual of \var{zipWith} where
+elements are split and fed to two different sinks.
+
+> instance Divisible Snk where
+>   divide div snk1 snk2 Nil = snk1 Nil >> snk2 Nil
+>   divide div snk1 snk2 (Cons a ss) =
+>     snk1 (Cons b $ \ss1 ->
+>     snk2 (Cons c $ \ss2 ->
+>     shiftSnk (divide div (sinkToSnk ss1)
+>                          (sinkToSnk ss2)) ss))
+>     where (b,c) = div a
+>
+>   conquer = plug
+
+The class \var{Decidable} has the methods \var{lose} and \var{choose}:
+
+> class Divisible f => Decidable f where
+>   choose :: (a -> Either b c) -> f b -> f c -> f a
+>   lose :: (a -> Void) -> f a
+
+The function \var{choose} can split up a sink so that some elements
+go to one sink and some go to another.
+
+> instance Decidable Snk where
+>   choose choice snk1 snk2 Nil = snk1 Nil >> snk2 Nil
+>   choose choice snk1 snk2 (Cons a ss)
+>     | Left b <- choice a = snk1 (Cons b $ \snk1' ->
+>       shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
+>   choose choice snk1 snk2 (Cons a ss)
+>     | Right c <- choice a = snk2 (Cons c $ \snk2' ->
+>       shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
+>
+>   lose f Nil = return ()
+>   lose f (Cons a ss) = ss (Cont (lose f))
 
 
 

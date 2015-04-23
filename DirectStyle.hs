@@ -391,3 +391,28 @@ instance Monad Src where
   return = unit
   (>>=) = bindSrc
 -}
+
+-- Functions from the contravariant package
+
+-- Divisible
+divide :: (a -> (b, c)) -> Snk b -> Snk c -> Snk a
+divide div snk1 snk2 Nil = snk1 Nil >> snk2 Nil
+divide div snk1 snk2 (Cons a ss) = snk1 (Cons b $ \ss1 -> snk2 (Cons c $ \ss2 -> shiftSnk (divide div (sinkToSnk ss1) (sinkToSnk ss2)) ss))
+  where (b,c) = div a
+
+conquer :: Snk a
+conquer = plug
+
+data Void
+
+-- Decidable
+lose :: (a -> Void) -> Snk a
+lose _ Nil = return ()
+lose f (Cons _ ss) = ss (Cont (lose f))
+
+choose :: (a -> Either b c) -> Snk b -> Snk c -> Snk a
+choose _      snk1 snk2 Nil = snk1 Nil >> snk2 Nil
+choose choice snk1 snk2 (Cons a ss)
+  | Left b <- choice a = snk1 (Cons b $ \snk1' -> shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
+choose choice snk1 snk2 (Cons a ss)
+  | Right c <- choice a = snk2 (Cons c $ \snk2' -> shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
