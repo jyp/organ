@@ -537,12 +537,20 @@ Appending and differences interact in the expected way:
 > prop_diff1 t s1 s2 = t -? (s1 <> s2) == t -? s2 -? s1
 > prop_diff2 t1 t2 s = (t1 <> t2) -! s == t1 -! t2 -! s
 
-> prop_diff3 t1 t2 s = (t1 <> t2) -? s == t1 -? (t2 -! s) -- ???
-> prop_diff4 t s1 s2 = t -! (s1 <> s2) == (t -? s1) -! s2 -- ???
+ <!--
+
+Not sure if these are true or what
+
+> prop_diff3 t1 t2 s = (t1 <> t2) -? s == t1 -? (t2 -! s)
+> prop_diff4 t s1 s2 = t -! (s1 <> s2) == (t -? s1) -! s2
+
+ -->
+
 
 
 The above laws can be proved by mutual induction with the associative
-laws of the monoids. Let us show the case for sources.
+laws of the monoids. Let us show only the case for sources, the case
+for sinks being similar.
 
 The \var{Full} case relies on the monoidal structure of effects:
 
@@ -1658,6 +1666,62 @@ source is empty.
 > chunkSnk s Nil = s Nil
 > chunkSnk s (Cons x xs) = forward (fromList x `appendSrc` unchunk xs) s
 
+Proof of associativity of append for sinks
+==========================================
+
+Nil case.
+
+\begin{spec}
+    ((t1 <> t2) <> t3) Nil
+== -- by def
+    (t1 <> t2) Nil <> t3 Nil
+== -- by def
+    (t1 Nil <> t2 Nil) <> t3 Nil
+==
+    t1 Nil <> (t2 Nil <> t3 Nil)
+== -- by def
+    t1 Nil <> ((t2 <> t3) Nil)
+== -- by def
+    (t1 <> (t2 <> t3)) Nil
+\end{spec}
+
+Cons case.
+
+\begin{spec}
+    ((t1 <> t2) <> t3) (Cons a s0)
+== -- by def
+    (t1 <> t2) (Cons a (t3 -! s0))
+== -- by def
+    t1 (Cons a (t2 -! (t3 -! s0)))
+== -- by IH
+    t1 (Cons a ((t2 <> t3) -! s0))
+== -- by def
+    (t1 <> (t2 <> t3)) (Cons a s0)
+\end{spec}
+
+Full case.
+\begin{spec}
+  ((t1 <> t2) -! s) Full
+== -- by def
+  s (Cont (t1 <> t2))
+== -- by def
+   (t2 -! s) (Cont t1)
+== -- by def
+  (t1 -! (t2 -! s)) Full
+\end{spec}
+
+Cont case.
+\begin{spec}
+  ((t1 <> t2) -! s) (Cont t0)
+== -- by def
+  s (Cont (t0 <> (t1 <> t2)))
+== -- by IH
+  s (Cont ((t0 <> t1) <> t2))
+== -- by def
+  (t2 -! s) (Cont (t0 <> t1))
+== -- by def
+  (t1 -! (t2 -! s)) (Cont t0)
+\end{spec}
 
 
 ScratchPad
