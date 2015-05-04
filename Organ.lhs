@@ -205,6 +205,9 @@ collapsed to a single one:
 > unshift :: N (NN a) -> N a
 > unshift k x = k (shift x)
 
+TODO: unshift is not join of the double negation monad. join would
+have type NN (NN a) -> NN a
+
 The above two functions are the \var{return} and \var{join} of the
 double negation monad. However, we will not be using this monadic
 structure anywhere in the following. Indeed, single negations play a
