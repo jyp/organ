@@ -1342,15 +1342,19 @@ must.
 App: idealised echo server
 ---------------------
 
+We finish exposition of asynchronous behaviour with a small program
+sketching the skeleton of a client-server application. This is a small
+server with two clients, which echoes the requests of each client to
+both of them.
 
-The server will communicate with each client via two streams, one for
+The server communicates with each client via two streams, one for
 inbound messages, one for outbound ones. We want each client to be
 able to send and recieve messages in the order that they like. That
 is, from their point of view, they are in control of the message
 processing order. Hence a client should have a co-sink for sending
 messages to the server, and a source for recieving them.  On the
-server side, a client is thus represented by a pair of a co-source and
-a sink:
+server side, types are dualized and thus, a client is represented by a
+pair of a co-source and a sink:
 
 > type Client a = (CoSrc a, Snk a)
 
@@ -1360,7 +1364,7 @@ clients.
 The first problem is to mulitiplex the inputs of the clients. In the
 server, we do not actually want any client to be controlling the
 processing order. Hence we have to mulitiplex the messages in real time,
-using a channel:
+using a channel (note the similarity with \var{chanBuffer}):
 
 > bufferedDmux :: CoSrc a -> CoSrc a -> Src a
 > bufferedDmux s1 s2 t = do
@@ -1370,8 +1374,8 @@ using a channel:
 >   chanSrc c t
 
 We then have to send each message to both clients. This may be done
-sending by the followig function, which forwards everything sent to a
-sink to its two argument sinks.
+using the following effect-free function, which forwards everything
+sent to a sink to its two argument sinks.
 
 > collapseSnk :: Snk a -> Snk a -> Snk a
 > collapseSnk t1 t2 Nil = t1 Nil <> t2 Nil
@@ -1382,8 +1386,7 @@ sink to its two argument sinks.
 >                                    (flip fwd c2))))
 
 
-The server can then be given the following  definition.
-
+The server can then be defined by composing the above two functions.
 
 > server :: Client a -> Client a -> Eff
 > server (i1,o1) (i2,o2) = forward  (bufferedDmux i1 i2)
@@ -1438,39 +1441,65 @@ stream.
 Compared to the representation in the present paper, the monadic
 streams only has one form of stream, corresponding to a source. Also,
 there is no support for timely release of resources, such things need
-to be dealt with outside of the stream framework.
+to be dealt with outside of the stream framework. Additionally, even
+conceptually effect-free streams rely on running IO effects.
+
+TODO: Josef: check
 
 Iteratees
 ---------
 
-The state of the art.
-
-Iteratees are parsers also.
-
-Iteratee is subject to the linearity convention as well:
-
-the type of
-iteratees is transparent, so users can in principle discard and
-duplicate continuations, thereby potentially duplicating or ignoring
-effects.
-
-
-
-\cite{kiselyov_iteratees_2012}
+We consider that the state of the art in Haskell stream processing is
+embodied by Kiselyov's iteratees \citeyear{kiselyov_iteratees_2012}.
+Several production-strength libraries have been built using the
+concept of iteratees, including *pipes* and *conduits*.  The type for
+iteratees can be given the following definitions:
 
 > data I s m a = Done a | GetC (Maybe s -> m (I s m a))
-> 
+
+An iteratee $I s m a$ roughly corresponds to a sink of $s$ which also
+returns an $a$ --- but it uses a monad $m$ rather than a monoid
+\var{Eff} for effects.
+
+As far as we understand, the above type is meant to be transparent:
+iteratee users may access the continuation in the \var{GetC}
+constructor. Therefore, users can in principle discard and duplicate
+continuations, thereby potentially duplicating or ignoring effects.
+This makes iteratees subject to the same linearity constraint as we
+have: a first advantage of our approach is the formulation and emphasis on
+the linearity constraint.
+
+A second advantage of our library is that effects are not required to
+be monads. Indeed, the use of continuations already provide the
+necessary structure to combine computations (indeed, double negation
+is a monad). We believe that having a single way to combine
+computations is a simplification in design which may make our library
+more approachable.
+
+The presence of source and sinks also clarifies how to build complex
+types. Indeed, iteratee-based libraries heavily use the following
+types:
+
 > type Enumerator el m a = I el m a -> m (I el m a)
 > type Enumeratee elo eli m a =
 >         I eli m a -> I elo m (I eli m a)
 
-http://johnlato.blogspot.se/2012/06/understandings-of-iteratees.html
+As far as we understand these types make up for the lack of explicit
+sources by putting iteratees (sinks) on the left-hand-side of an
+arrow. Enumerators are advantagously replaced by sources, and
+enumeratees by simple functions from source to source.
 
-* "Conduits"
-* Pipes
-* Yield
 
-\cite{kiselyov_lazy_2012}
+A third advantage of our approach is that the need for buffering (or
+the scheduling opportunities) are clearly indicated by the type
+system, as mismatching polarities.
+
+
+
+In more recent work \citet{kiselyov_lazy_2012} present a
+continuation-based pretty printer, which fosters a more stylized used
+of continuations, closer to what we advocate here. Producers and
+consumers (sources and sinks) are defined more simply:
 
 \begin{spec}
 type GenT e m = ReaderT (e -> m ()) m
@@ -1480,6 +1509,8 @@ type Consumer m e = e -> m ()
 type Transducer m1 m2 e1 e2 = Producer m1 e1 -> Producer m2 e2
 \end{spec}
 
+Yet, linearity is still not emphasised, the use of a monad (rather
+than monoid) persists, and mismatching polarities are not discussed.
 
 Session Types
 -------------
@@ -1508,7 +1539,7 @@ Parallelism ?
 > type Pull a = NN (Int -> a)
 > type Push a = N (Int -> N a)
 
-Bidirectional protocols. 
+Bidirectional protocols.
 
 Future Work
 ===========
