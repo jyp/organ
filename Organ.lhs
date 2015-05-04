@@ -826,8 +826,8 @@ fails as last resort:
 >  where
 >   scan :: P s a -> Maybe a -> Snk s
 >   scan (Result res p)  _         xs     = scan p (Just res) xs
->   scan Fail           mres       xs     = ret mres >> fwd xs Full
->   scan (Sym f)        mres       xs     = case xs of
+>   scan Fail            mres      xs     = ret mres >> fwd xs Full
+>   scan (Sym f)         mres      xs     = case xs of
 >     Nil        -> scan (f Nothing) mres Nil
 >     Cons x cs  -> forward cs (scan (f $ Just x) mres)
 
@@ -842,9 +842,10 @@ the stream are closed.
 > parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x Fail
 >  where
 >   scan :: P s a -> Snk a -> Snk s
->   scan (Result res _) ret        xs     = ret (Cons res $ parse q $ fwd xs)
->   scan Fail           ret        xs     = ret Nil <> fwd xs Full
->   scan (Sym f)        mres       xs     = case xs of
+>   scan (Result res _)  ret        xs     = ret
+>                                            (Cons res $ parse q $ fwd xs)
+>   scan Fail            ret        xs     = ret Nil <> fwd xs Full
+>   scan (Sym f)         mres       xs     = case xs of
 >     Nil        -> scan (f Nothing) mres Nil
 >     Cons x cs  -> forward cs (scan (f $ Just x) mres)
 
@@ -1457,7 +1458,7 @@ iteratees can be given the following definitions:
 
 > data I s m a = Done a | GetC (Maybe s -> m (I s m a))
 
-An iteratee $I s m a$ roughly corresponds to a sink of $s$ which also
+An iteratee $I\,s\,m\,a$ roughly corresponds to a sink of $s$ which also
 returns an $a$ --- but it uses a monad $m$ rather than a monoid
 \var{Eff} for effects.
 
@@ -1499,14 +1500,15 @@ system, as mismatching polarities.
 In more recent work \citet{kiselyov_lazy_2012} present a
 continuation-based pretty printer, which fosters a more stylized used
 of continuations, closer to what we advocate here. Producers and
-consumers (sources and sinks) are defined more simply:
+consumers (sources and sinks) are defined more simply, using simple
+negations:
 
 \begin{spec}
 type GenT e m = ReaderT (e -> m ()) m
---   GenT e m a  = (e -> m ()) -> m a
 type Producer m e = GenT e m ()
 type Consumer m e = e -> m ()
-type Transducer m1 m2 e1 e2 = Producer m1 e1 -> Producer m2 e2
+type Transducer m1 m2 e1 e2 =
+  Producer m1 e1 -> Producer m2 e2
 \end{spec}
 
 Yet, linearity is still not emphasised, the use of a monad (rather
@@ -1517,7 +1519,8 @@ Session Types
 
 In essence our pair of types for stream is an encoding of a protocol
 for data transmission. This protocol is readily expressible using
-linear types, following the ideas of TODO {Wadler 12, Pfenning and Caires}:
+linear types, following the ideas of \citet{wadler_propositions_2012}
+and \citet{caires_concurrent_2012}:
 
 \begin{spec}
 Source a = 1 ⊕ (a ⊗ N (Sink a))
@@ -1531,15 +1534,6 @@ other encodings could be chosen. For example, we could have used the
 technique of Pucella and Tov (Haskell session types with almost no
 class), which does not require abiding to linearity.
 
-
-Parallelism ?
-===========
-
-
-> type Pull a = NN (Int -> a)
-> type Push a = N (Int -> N a)
-
-Bidirectional protocols.
 
 Future Work
 ===========
@@ -1576,7 +1570,6 @@ latex.
 
 
 \appendix
-\section{Appendix: implementation details}
 
 Table of Functions: implementations
 ===================================
@@ -1702,4 +1695,13 @@ TODO: on this simple program it's not clear when (or if) the input stream is goi
 > dbg (Cons c s) = do
 >   putStrLn c
 >   s (Cont dbg)
+
+
+Parallelism ?
+-------------
+
+> type Pull a = NN (Int -> a)
+> type Push a = N (Int -> N a)
+
+Bidirectional protocols.
 
