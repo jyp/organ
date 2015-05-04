@@ -105,6 +105,8 @@ Forward all the data from the source to the sink; the remainder sink is returned
 >     [result] -> result
 >     _ -> error "linearity broken!"
 
+> showSrc :: forall a. Show a => (forall f. Src f a) -> String
+> showSrc x = show (toList x :: NN [String] [a])
 
 > instance Eq a => Eq (NN [Bool] a) where
 >   x == y = case x $ \x' -> y $ \y' -> [x' == y'] of
@@ -115,7 +117,7 @@ Forward all the data from the source to the sink; the remainder sink is returned
 > newtype AnySnk a = T (forall f. Snk f a)
 
 > instance Eq a => Eq (AnySrc a) where
->   S s1 == S s2 = eq' (toList s1) (toList s2)
+>   S s1 == S s2 = eq (toList s1) (toList s2)
 
 > (-?) :: Monoid f => Snk f a -> Src f a -> Snk f a
 > t -? s = forwardThenSnk t s
@@ -131,8 +133,6 @@ Forward all the data from the source to the sink; the remainder sink is returned
 > eqSrc :: Eq a => (forall f. Monoid f => Src f a) -> (forall f. Monoid f => Src f a) -> Bool
 > eqSrc s1 s2 = eq (toList s1) (toList s2)
 
-> eqSnk :: Eq a => (forall f. Monoid f => Snk f a) -> (forall f. Monoid f => Snk f a) -> Bool
-> eqSnk = _  -- for any source, 
 
 > eq :: Eq a => (forall f. Monoid f => NN f a) -> (forall f. Monoid f => NN f a) -> Bool
 > eq s1 s2 = case s1 $ \x' -> s2 $ \y' -> [x' == y'] of
