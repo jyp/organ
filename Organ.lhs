@@ -701,124 +701,86 @@ go to one sink and some go to another.
 >   lose f (Cons a ss) = ss (Cont (lose f))
 
 
+Table of effect-free functions
+------------------------------
 
-Effectful streams
-=================
+Many more effect-free functions can be implemented. We give here a
+menu of functions that we have implemented and whose implementation
+is available in the appendix.
 
-So far, we have constructed only effect-free streams. That is, the
-equality $\var{Eff} = \var{IO} ()$ was never used. In this section we bridge this
-gap and provide some useful sources and sinks performing input or
-output.
+(implementable without reference to IO, preserving syncronicity)
 
-We first define the following helper function, which sends data to a
-handle, thereby constructing a sink.
+Zip two sources, and the dual.
 
-> hFileSnk :: Handle -> Snk String
-> hFileSnk h Nil = hClose h
-> hFileSnk h (Cons c s) = do
->   hPutStrLn h c
->   s (Cont (hFileSnk h))
+> zipSrc :: Src a -> Src b -> Src (a,b)
+> unzipSnk :: Snk (a,b) -> Src a -> Src b -> Eff
 
-A file sink is then simply:
+Unzip a source (sending data to parallel sources), and the dual.
 
-> fileSnk :: FilePath -> Snk String
-> fileSnk file s = do
->   h <- openFile file WriteMode
->   hFileSnk h s
+> unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
+> zipSnk :: Snk a -> Snk b -> Snk (a,b)
 
-And the sink for standard output is:
+Equivalent of \var{scanl'} for sources, and the dual
 
-> stdoutSnk :: Snk String
-> stdoutSnk = hFileSnk stdout
+> scanSrc :: (b -> a -> b) -> b -> Src a -> Src b
+> scanSnk :: (b -> a -> b) -> b -> Snk b -> Snk a
+
+Equivalent of \var{foldl'} for sources, and the dual.
+
+> foldSrc' :: (b -> a -> b) -> b -> Src a -> NN b
+> foldSnk' :: (b -> a -> b) -> b -> N b -> Snk a
+
+Drop some elements from a sources, and the dual.
+
+> dropSrc :: Int -> Src a -> Src a
+> dropSnk :: Int -> Snk a -> Snk a
+
+Convert a list to a source.
+
+> fromList :: [a] -> Src a
+
+Split a source in lines, and the dual.
+
+> linesSrc :: Src Char -> Src String
+> unlinesSnk :: Snk String -> Snk Char
 
 
-Conversely, a file source reads data from a file, as follows:
+Consume elements until the predicate is reached; then the sink is
+closed.
 
-> hFileSrc :: Handle -> Src String
-> hFileSrc h Full = hClose h
-> hFileSrc h (Cont c) = do
->   e <- hIsEOF h
->   if e   then   do  hClose h
->                     c Nil
->          else   do  x <- hGetLine h
->                     c (Cons x $ hFileSrc h)
+> untilSnk :: (a -> Bool) -> Snk a
 
-> fileSrc :: FilePath -> Src String
-> fileSrc file sink = do
->   h <- openFile file ReadMode
->   hFileSrc h sink
+Interleave two sources, and the dual.
 
-Combining the above primitives, we can then implement file copy as
-follows:
+> interleave :: Src a -> Src a -> Src a
+> interleaveSnk :: Snk a -> Src a -> Snk a
 
-> copyFile :: FilePath -> FilePath -> Eff
-> copyFile source target = forward  (fileSrc source)
->                                   (fileSnk target)
+Forward data coming from the input source to the result source and to
+the second argument sink.
 
-It should be emphasised at this point that reading and writing will be
-interleaved: in order to produce the next file line (in the source),
-the current line must be consumed by writing it to disk (in the sink).
-The stream behaves fully synchronously, and no intermediate data is
-buffered.
+> tee :: Src a -> Snk a -> Src a
 
-When the sink is full, the source connected to it should be finalized.
-The next example shows what happens when a sink closes the stream
-early. Instead of connecting the source to a bottomless sink, we
-connect it to one which stops receiving input after three lines.
+Filter a source, and the dual.
 
-> read3Lines :: Eff
-> read3Lines = forward  (hFileSrc stdin)
->                       (takeSnk 3 $ fileSnk "text.txt")
+> filterSrc :: (a -> Bool) -> Src a -> Src a
 
-Indeed, testing the above program reveals that it properly closes
-\var{stdin} after reading three lines. This early closing of sinks
-allows modular stream programming. In particular, it is easy to
-support proper finalization in the presence of exceptions, as the next
-section shows.
+Dual to \var{filterSrc}
 
-Exception Handling
-------------------
+> filterSnk :: (a -> Bool) -> Snk a -> Snk a
 
-While the above implementations of file source and sink are fine for
-illustrative purposes, their production-strength versions should
-handle exceptions. Doing so is straightforward: as shown above, our
-sinks and sources readily support early closing of the stream.
+Turn a source of chunks of data into a single source; and the dual.
 
-The following code fragment shows how to hande an exception when
-reading a line in a file source.
-
-> hFileSrcSafe :: Handle -> Src String
-> hFileSrcSafe h Full = hClose h
-> hFileSrcSafe h (Cont c) = do
->   e <- hIsEOF h
->   if e then do
->          hClose h
->          c Nil
->        else do
->          mx <- catch  (Just <$> hGetLine h)
->                       (\(_ :: IOException) -> return Nothing)
->          case mx of
->            Nothing -> c Nil
->            Just x -> c (Cons x $ hFileSrcSafe h)
-
-Exceptions raised in \var{hIsEOF} should be handled in a similar same
-way, as well as those raised in a file sink; we leave this simple
-exercise to the reader.
-
-In an industrial-strength implementation, one would probably have a
-field in both the \var{Nil} and \var{Full} constructors indicating the
-nature of the exception encountered, but we will not bother in the
-proof of concept implementation presented in this paper.
-
+> unchunk :: Src [a] -> Src a
+> chunkSnk :: Snk a -> Snk [a]
 
 
 App: Stream-Based Parsing
 -------------------------
 
-The next application is a stream transformer which parses an input
-stream into structured chunks. This is useful for example to turn an
-XML file inputted as stream of characters into a stream of (opening
-and closing) tags.
+A source of unstructured data can be turned into a source of
+structured data, given a parser of that input.  This conversion is
+useful for example to turn an XML file inputted as stream of
+characters into a stream of (opening and closing) tags.
 
 We beging by defining a pure parsing structure, modeled after the
 parallel parsing processes of \citet{claessen_parallel_2004}.  The
@@ -889,24 +851,138 @@ the stream are closed.
 
 
 
+Effectful streams
+=================
+
+So far, we have constructed only effect-free streams. That is, effects
+could be any monoid, and in particular the empty type.  In this
+section we bridge this gap and provide some useful sources and sinks
+performing IO effects, namely reading and writing to files.
+
+We first define the following helper function, which sends data to a
+handle, thereby constructing a sink.
+
+> hFileSnk :: Handle -> Snk String
+> hFileSnk h Nil = hClose h
+> hFileSnk h (Cons c s) = do
+>   hPutStrLn h c
+>   s (Cont (hFileSnk h))
+
+A file sink is then simply:
+
+> fileSnk :: FilePath -> Snk String
+> fileSnk file s = do
+>   h <- openFile file WriteMode
+>   hFileSnk h s
+
+And the sink for standard output is:
+
+> stdoutSnk :: Snk String
+> stdoutSnk = hFileSnk stdout
+
+(For ease of experimenting with our functions, the data items are
+lines of text --- but an industrial variant would provide chunks of
+raw binary data, to be further parsed.)
+
+Conversely, a file source reads data from a file, as follows:
+
+> hFileSrc :: Handle -> Src String
+> hFileSrc h Full = hClose h
+> hFileSrc h (Cont c) = do
+>   e <- hIsEOF h
+>   if e   then   do  hClose h
+>                     c Nil
+>          else   do  x <- hGetLine h
+>                     c (Cons x $ hFileSrc h)
+
+> fileSrc :: FilePath -> Src String
+> fileSrc file sink = do
+>   h <- openFile file ReadMode
+>   hFileSrc h sink
+
+Combining the above primitives, we can then implement file copy as
+follows:
+
+> copyFile :: FilePath -> FilePath -> Eff
+> copyFile source target = forward  (fileSrc source)
+>                                   (fileSnk target)
+
+It should be emphasised at this point that reading and writing will be
+interleaved: in order to produce the next line in the source (in this
+case by reading from the file) , the current line must first be
+consumed in the sink (in this case by writing it to disk).  The stream
+behaves fully synchronously, and no intermediate data is buffered.
+
+When the sink is full, the source connected to it should be finalized.
+The next example shows what happens when a sink closes the stream
+early. Instead of connecting the source to a bottomless sink, we
+connect it to one which stops receiving input after three lines.
+
+> read3Lines :: Eff
+> read3Lines = forward  (hFileSrc stdin)
+>                       (takeSnk 3 $ fileSnk "text.txt")
+
+Indeed, testing the above program reveals that it properly closes
+\var{stdin} after reading three lines. This early closing of sinks
+allows modular stream programming. In particular, it is easy to
+support proper finalization in the presence of exceptions, as the next
+section shows.
+
+Exception Handling
+------------------
+
+While the above implementations of file source and sink are fine for
+illustrative purposes, their production-strength versions should
+handle exceptions. Doing so is straightforward: as shown above, our
+sinks and sources readily support early closing of the stream.
+
+The following code fragment shows how to hande an exception when
+reading a line in a file source.
+
+> hFileSrcSafe :: Handle -> Src String
+> hFileSrcSafe h Full = hClose h
+> hFileSrcSafe h (Cont c) = do
+>   e <- hIsEOF h
+>   if e then do
+>          hClose h
+>          c Nil
+>        else do
+>          mx <- catch  (Just <$> hGetLine h)
+>                       (\(_ :: IOException) -> return Nothing)
+>          case mx of
+>            Nothing -> c Nil
+>            Just x -> c (Cons x $ hFileSrcSafe h)
+
+Exceptions raised in \var{hIsEOF} should be handled in a similar same
+way, as well as those raised in a file sink; we leave this simple
+exercise to the reader.
+
+In an industrial-strength implementation, one would probably have a
+field in both the \var{Nil} and \var{Full} constructors indicating the
+nature of the exception encountered, if any, but we will not bother in the
+proof of concept implementation presented in this paper.
+
+
+
+
 Synchronicity and Asynchronicity
 ================================
 
 One of the main benefits of streams as defined here is that the
 programming interface is (or appears to be) asynchronous, while the
 runtime behaviour is synchronous.
-
-One can build a data source regardless of how the data is be consumed,
+That is, one can build a data source regardless of how the data is be consumed,
 or dually one can build a sink regardless of how the data is produced;
 but, despite the independency of definitions, all the code can (and
 is) executed synchronously: composing a source and a sink require no
 concurrency (nor any external control structures).
 
-A consequence of synchronicity is that the programer cannot be
-implicity buffering data: every production must be matched by a
-consuption (and vice versa). However, explicity build a list with a
-source contents, if one so decides. This essentially builds a bridge
-to pure list processing code, by loading all the data to memory.
+As discussed above, a consequence of synchronicity is that the
+programer cannot be implicity buffering data: every production must be
+matched by a consuption (and vice versa). Yet, one explicity build a
+list with the contents of a source, if one so decides. This provides a
+bridge to pure list-processing code, by loading all the data to
+memory.
 
 > toList :: Src a -> NN [a]
 > toList s k = shiftSrc s (toListSnk k)
@@ -918,7 +994,7 @@ to pure list processing code, by loading all the data to memory.
 In sum, synchronicity restricts the kind of operations one can
 construct, in exchange for two guarantees:
 
-1. Finalization of sources and stream is synchronous
+1. Processing of sources and stream is synchronous
 2. No implicit memory allocation happens
 
 While the guarantees have been discussed so far, it may be unclear how
@@ -966,24 +1042,25 @@ mux sa sb = ?
 \end{spec}
 
 We can try to fill the hole by reading on a source. However, if we do
-this, the choice falls to us to choose which source to run first. We
-may pick \var{sa}, however it may be blocking, while \var{sb} is ready
-with data. This is not really multiplexing, at best this approach
-would give us interleaving of data sources by taking turns.
+this, the choice falls to the multiplexer to choose which source to
+run first. We may pick \var{sa}, however it may be blocking, while
+\var{sb} is ready with data. This is not really multiplexing, at best
+this approach would give us interleaving of data sources, by taking
+turns.
 
 In order to make any progress, we can let the choice of which source
-to pick fall on the consumer of the stream. What we need in this case
-is the so-called additive conjuction. It is the dual of the
-\var{Either} type: there is a choice, but this choice falls on the
-consumer rather than the producer of the data. Additive conjuction,
-written &, can be encoded by sandwiching \var{Either} between two
-inversion of the control flow, thus switching the party who makes the
-choice:
+to pick fall on the consumer of the stream. The type that we need for
+output data in this case is a so-called additive conjuction. It is
+the dual of the \var{Either} type: there is a choice, but this choice
+falls on the consumer rather than the producer of the data. Additive
+conjuction, written &, can be encoded by sandwiching \var{Either}
+between two inversion of the control flow, thus switching the party
+who makes the choice:
 
 > type a & b = N (Either (N a) (N b))
 
 (One will recognize the similarity between this definition and the
-deMorgan law.)
+De Morgan's laws.)
 
 We can then amend the type of multiplexing:
 
@@ -999,9 +1076,9 @@ symmetrically for $b$.
 >                         (\ab -> case ab of
 >                                  Left   ka -> sa $ Cont $ \(Cons a resta) -> ka a
 >                                  Right  kb -> sb $ Cont $ \(Cons b restb) -> kb b)
->                         (error "???")
+>                         (error "oops")
 
-However, there is no way to then make a recursive call (???) to
+However, there is no way to then make a recursive call (`oops`) to
 continue processing.  Indeed the recursive call to make must depend on
 the choice made by the consumer (in one case we should be using
 \var{resta}, in the other \var{restb}). However the type of \var{Cons}
@@ -1013,10 +1090,10 @@ source which is in control of the flow of execution.
 Co-Sources, Co-Sinks
 -------------------
 
-We call the structure that we are looking for *co-sources*, and they
-are the subject of this section.
-Remembering that producing $N a$ is equivalent to consuming $a$, we
-define:
+We call the structure that we are looking for a
+*co-source*. Co-sources are the subject of this section.  Remembering
+that producing $N a$ is equivalent to consuming $a$, thus a sink of $N
+a$ is a (different kind of) source of $a$. We define:
 
 > type CoSrc a = Snk (N a)
 > type CoSnk a = Src (N a)
@@ -1051,8 +1128,9 @@ implement this extraction looks as follows.
 If one tries to begin by eliminating the co-source (1), then there is no
 way to produce subsequent elements of the list. If one tries to begin
 by constructing the list (2), then no data is available.
+
 Yet it is possible to define useful and effectful co-sources and
-co-sinks. The first example is providing a file as a co-source:
+co-sinks. The first example shows how to provide a file as a co-source:
 
 > coFileSrc :: Handle -> CoSrc String
 > coFileSrc h Nil = hClose h
@@ -1071,29 +1149,32 @@ no data dependency. Therefore they may be run in any order, including
 concurrently (we will see in the next section how this situation
 generalises).
 
-The second example is a co-sink which sends its contents to a file.
+The second example is a co-sink that sends data to a file.
 
 > coFileSink :: Handle -> CoSnk String
 > coFileSink h Full = hClose h
 > coFileSink h (Cont c) = c (Cons  (hPutStrLn h)
 >                                  (coFileSink h))
 
-Compared to \var{fileSnk}, the difference is that one does not control the
-order of execution of effects. The effect of writing the current line
-is put in a data structure, and its execution is up to the co-source
-which will eventually connect to the co-sink.
+Compared to \var{fileSnk}, the difference is that one does not control
+the order of execution of effects. The effect of writing the current
+line is put in a data structure, and its execution is up to the
+co-source which will eventually connect to the co-sink. Thus, the
+order of lines in the file will depend on the order of effects chosen
+in the co-source connected to this co-sink.
 
 In sum, using co-sources and co-sinks shifts the flow of control from
 the sink to the source. It should be stressed that, in the programs
-which use the functions defined so far (even those that use IO)
-synchronicity is preserved.
+which use the functions defined so far (even those that use IO),
+synchronicity is preserved: no data is buffered implicitly, and
+reading and writing are interleaved.
 
 Asynchronicity
 --------------
 
 We have seen so far that synchronicity gives useful guarantees, but
 restricts the kind of programs one can write. In this section, we will
-provide primitives which allow forms of asynchronous programming using
+provide primitives which allow forms of asynchronous programming within
 our framework.
 The main benefit of sticking to our framework in this case is that
 asynchronous behaviour is cornered to the explicit usages of these
@@ -1124,11 +1205,12 @@ Implementing the conversions is then straightforward:
 > srcToCoSrc strat s s0 = shiftSrc s $ \ s1 -> strat s1 s0
 > coSnkToSnk strat s s0 = shiftSrc s $ \ s1 -> strat s0 s1
 
-There are (infinitely) many possible concurrency strategies, however
+There are (infinitely) many possible concurrency strategies. However,
 in practice we think that one will mostly be combining either of the
-following two flavours.  The simplest one (used in \var{coFileSrc}) is
-sequential execution, and is defined by looping through both sources
-and match the consumptions/productions elementwise.
+following two flavours: sequential and concurrent.  The simplest one
+(used in \var{coFileSrc}) is sequential execution, and is defined by
+looping through both sources and match the consumptions/productions
+elementwise.
 
 > sequentially :: Strategy a
 > sequentially Nil (Cons _ xs) = xs Full
@@ -1162,7 +1244,7 @@ swap a strategy for another.
 
 Consider now the situation where one needs to convert from a
 \var{CoSrc} to a \var{Src} (or from a \var{Snk} to a \var{CoSnk}).
-Here, we have two streams which want to control the execution
+Here, we have two streams, both of which want to control the execution
 flow. The conversion can only be implemented by running both streams
 in concurrent threads, and have them communicate via some form of
 buffer. A form of buffer that we have seen before is the file. Using
@@ -1248,12 +1330,14 @@ scheduling choice. This choice can be any static or dynamic processing
 order. In particular parallel processing is allowed.
 
 3. Two negatives. In this case the streams must run in independent
-threads, and programmer needs to make a choice for the communication
+threads, and the programmer needs to make a choice for the communication
 buffer. One needs to be careful: if the buffer is to small a deadlock
 may occur.
 
-Therefore, when programming with streams, one should prefer to consume
-negative types and produce positive ones.
+Therefore, when programming with streams, one should consume negative
+types when one can, and positive ones when one must. Conversely, one
+should produce positive types when one can, and negative ones when one
+must.
 
 App: idealised echo server
 ---------------------
@@ -1306,149 +1390,6 @@ The server can then be given the following  definition.
 >                                   (collapseSnk o1 o2)
 
 
-
-
-
-Table of transparent functions
-------------------------------
-
-(implementable without reference to IO, preserving syncronicity)
-
-Zip two sources:
-
-> zipSrc :: Src a -> Src b -> Src (a,b)
-> zipSrc s1 s2 = unshiftSrc (\t -> unzipSnk t s1 s2)
-
-Unzip a sink (recieving data from parallel sources)
-
-> unzipSnk :: Snk (a,b) -> Src a -> Src b -> Eff
-> unzipSnk sab ta tb =
->   shiftSrc ta $ \ta' ->
->   case ta' of
->     Nil -> tb Full <> sab Nil
->     Cons a as ->  shiftSrc tb $ \tb' ->  case tb' of
->       Nil -> as Full <> sab Nil
->       Cons b bs -> forward (cons (a,b) $ zipSrc as bs) sab
-
-Unzip a source (sending data to parallel sources)
-
-> unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
-> unzipSrc sab ta tb = shiftSnk (zipSnk ta tb) sab
-
-Zipping sinks
-
-> zipSnk :: Snk a -> Snk b -> Snk (a,b)
-> zipSnk sa sb Nil = sa Nil <> sb Nil
-> zipSnk sa sb (Cons (a,b) tab) = sa $ Cons a $ \sa' ->
->                                 sb $ Cons b $ \sb' ->
->                                 unzipSrc tab (flip fwd sa') (flip fwd sb')
-
-Equivalent of \var{scanl'} for sources
-
-> scanSrc :: (b -> a -> b) -> b -> Src a -> Src b
-> scanSrc f !z = flipSnk (scanSnk f z)
-
-Dual to \var{scanSrc}
-
-> scanSnk :: (b -> a -> b) -> b -> Snk b -> Snk a
-> scanSnk _ _ snk Nil          = snk Nil
-> scanSnk f z snk (Cons a s)   = snk $ Cons next $ scanSrc f next s
->   where next = f z a
-
-Equivalent of \var{foldl'} for sources
-
-> foldSrc' :: (b -> a -> b) -> b -> Src a -> NN b
-> foldSrc' f !z s nb = s (Cont (foldSnk' f z nb))
-
-> foldSnk' :: (b -> a -> b) -> b -> N b -> Snk a
-> foldSnk' _ z nb Nil = nb z
-> foldSnk' f z nb (Cons a s) = foldSrc' f (f z a) s nb
-
-Return the last element of the source, or the first argument if the
-source is empty.
-
-> lastSrc :: a -> Src a -> NN a
-> lastSrc x s k = shiftSrc s $ \s' -> case s' of
->   Nil -> k x
->   Cons x' cs -> lastSrc x' cs k
-
-Drop some elements from a sources
-
-> dropSrc :: Int -> Src a -> Src a
-> dropSrc i = flipSnk (dropSnk i)
-
-Dual to \var{dropSrc}
-
-> dropSnk :: Int -> Snk a -> Snk a
-> dropSnk 0 s s' = s s'
-> dropSnk _ s Nil = s Nil
-> dropSnk i s (Cons _ s') = shiftSrc (dropSrc (i-1) s') s
-
-
-> fromList :: [a] -> Src a
-> fromList = foldr cons empty
-
-> enumFromToSrc :: Int -> Int -> Src Int
-> enumFromToSrc _ _ Full = mempty
-> enumFromToSrc b e (Cont s)
->   | b > e     = s Nil
->   | otherwise = s (Cons b (enumFromToSrc (b+1) e))
-
-> linesSrc :: Src Char -> Src String
-> linesSrc = flipSnk unlinesSnk
-
-> unlinesSnk :: Snk String -> Snk Char
-> unlinesSnk = unlinesSnk' []
-
-> unlinesSnk' :: String -> Snk String -> Snk Char
-> unlinesSnk' acc s Nil = s (Cons acc empty)
-> unlinesSnk' acc s (Cons '\n' s') = s (Cons (reverse acc) (linesSrc s'))
-> unlinesSnk' acc s (Cons c s') = s' (Cont $ unlinesSnk' (c:acc) s)
-
-Consume elements until the predicate is reached; then the sink is
-closed.
-
-> untilSnk :: (a -> Bool) -> Snk a
-> untilSnk _ Nil = mempty
-> untilSnk p (Cons a s)
->   | p a  = s Full
->   | True = s (Cont (untilSnk p))
-
-> interleave :: Src a -> Src a -> Src a
-> interleave s1 s2 Full = s1 Full <> s2 Full
-> interleave s1 s2 (Cont s) = s1 (Cont (interleaveSnk s s2))
-
-> interleaveSnk :: Snk a -> Src a -> Snk a
-> interleaveSnk snk src Nil = forward src snk
-> interleaveSnk snk src (Cons a s) = snk (Cons a (interleave s src))
-
-Forward data coming from the input source to the result source and to
-the second argument sink.
-
-> tee :: Src a -> Snk a -> Src a
-> tee s1 t1 = flipSnk (collapseSnk t1) s1
-
-Filter a source
-
-> filterSrc :: (a -> Bool) -> Src a -> Src a
-> filterSrc p = flipSnk (filterSnk p)
-
-Dual to \var{filterSrc}
-
-> filterSnk :: (a -> Bool) -> Snk a -> Snk a
-> filterSnk _ snk Nil = snk Nil
-> filterSnk p snk (Cons a s)
->   | p a       = snk (Cons a (filterSrc p s))
->   | otherwise = s (Cont (filterSnk p snk))
-
-> unchunk :: Src [a] -> Src a
-> unchunk = flipSnk chunkSnk
-
-> chunkSnk :: Snk a -> Snk [a]
-> chunkSnk s Nil = s Nil
-> chunkSnk s (Cons x xs) = forward (fromList x `appendSrc` unchunk xs) s
-
-Table of primitive functions (implementable by reference to IO, may break syncronicity)
 
 Related Work
 ============
@@ -1605,6 +1546,93 @@ latex.
 
 \appendix
 \section{Appendix: implementation details}
+
+Table of Functions: implementations
+===================================
+
+> zipSrc s1 s2 = unshiftSrc (\t -> unzipSnk t s1 s2)
+
+> unzipSnk sab ta tb =
+>   shiftSrc ta $ \ta' ->
+>   case ta' of
+>     Nil -> tb Full <> sab Nil
+>     Cons a as ->  shiftSrc tb $ \tb' ->  case tb' of
+>       Nil -> as Full <> sab Nil
+>       Cons b bs -> forward (cons (a,b) $ zipSrc as bs) sab
+
+> unzipSrc sab ta tb = shiftSnk (zipSnk ta tb) sab
+
+> zipSnk sa sb Nil = sa Nil <> sb Nil
+> zipSnk sa sb (Cons (a,b) tab) = sa $ Cons a $ \sa' ->
+>                                 sb $ Cons b $ \sb' ->
+>                                 unzipSrc tab (flip fwd sa') (flip fwd sb')
+
+> scanSrc f !z = flipSnk (scanSnk f z)
+
+> scanSnk _ _ snk Nil          = snk Nil
+> scanSnk f z snk (Cons a s)   = snk $ Cons next $ scanSrc f next s
+>   where next = f z a
+
+> foldSrc' f !z s nb = s (Cont (foldSnk' f z nb))
+
+> foldSnk' _ z nb Nil = nb z
+> foldSnk' f z nb (Cons a s) = foldSrc' f (f z a) s nb
+
+Return the last element of the source, or the first argument if the
+source is empty.
+
+> lastSrc :: a -> Src a -> NN a
+> lastSrc x s k = shiftSrc s $ \s' -> case s' of
+>   Nil -> k x
+>   Cons x' cs -> lastSrc x' cs k
+
+> dropSrc i = flipSnk (dropSnk i)
+
+> dropSnk 0 s s' = s s'
+> dropSnk _ s Nil = s Nil
+> dropSnk i s (Cons _ s') = shiftSrc (dropSrc (i-1) s') s
+
+> fromList = foldr cons empty
+
+> enumFromToSrc :: Int -> Int -> Src Int
+> enumFromToSrc _ _ Full = mempty
+> enumFromToSrc b e (Cont s)
+>   | b > e     = s Nil
+>   | otherwise = s (Cons b (enumFromToSrc (b+1) e))
+
+> linesSrc = flipSnk unlinesSnk
+
+> unlinesSnk = unlinesSnk' []
+
+> unlinesSnk' :: String -> Snk String -> Snk Char
+> unlinesSnk' acc s Nil = s (Cons acc empty)
+> unlinesSnk' acc s (Cons '\n' s') = s (Cons (reverse acc) (linesSrc s'))
+> unlinesSnk' acc s (Cons c s') = s' (Cont $ unlinesSnk' (c:acc) s)
+
+> untilSnk _ Nil = mempty
+> untilSnk p (Cons a s)
+>   | p a  = s Full
+>   | True = s (Cont (untilSnk p))
+
+> interleave s1 s2 Full = s1 Full <> s2 Full
+> interleave s1 s2 (Cont s) = s1 (Cont (interleaveSnk s s2))
+
+> interleaveSnk snk src Nil = forward src snk
+> interleaveSnk snk src (Cons a s) = snk (Cons a (interleave s src))
+
+> tee s1 t1 = flipSnk (collapseSnk t1) s1
+
+> filterSrc p = flipSnk (filterSnk p)
+
+> filterSnk _ snk Nil = snk Nil
+> filterSnk p snk (Cons a s)
+>   | p a       = snk (Cons a (filterSrc p s))
+>   | otherwise = s (Cont (filterSnk p snk))
+
+> unchunk = flipSnk chunkSnk
+
+> chunkSnk s Nil = s Nil
+> chunkSnk s (Cons x xs) = forward (fromList x `appendSrc` unchunk xs) s
 
 
 
