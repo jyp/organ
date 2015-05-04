@@ -1723,7 +1723,7 @@ Cont case.
   (t1 -! (t2 -! s)) (Cont t0)
 \end{spec}
 
-
+  <!--
 ScratchPad
 ==========
 
@@ -1740,17 +1740,6 @@ ScratchPad
 > emptyCh k = k $ CS $ \k' -> k' (Inl TT)
 
 
-TODO: on this simple program it's not clear when (or if) the input stream is going to be closed.
-
-
-> func = do
->   input <- hGetContents stdin
->   writeFile "test1.txt" (unlines $ take 3 $ lines input)
-
-> failure = do
->   func
->   func
-
 > printSrc :: Show a => Src a -> IO ()
 > printSrc s = forward (mapSrc show s) dbg
 
@@ -1761,11 +1750,8 @@ TODO: on this simple program it's not clear when (or if) the input stream is goi
 >   s (Cont dbg)
 
 
-Parallelism ?
--------------
-
 > type Pull a = NN (Int -> a)
 > type Push a = N (Int -> N a)
 
-Bidirectional protocols.
 
+-->
