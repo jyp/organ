@@ -235,7 +235,7 @@ simple :: Src a -> Src a
 \end{spec}
 
 However, having explicit access to sinks allows us to (for example)
-dispatch a single source to mulitiple sinks, as in the following type signature:
+dispatch a single source to multiple sinks, as in the following type signature:
 \begin{spec}
 unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
 \end{spec}
@@ -275,7 +275,7 @@ itself effectful.
 
 The linearity convention is then respected iff:
 
-1. No effectful variable may not be duplicated or shared. In
+1. No effectful variable may be duplicated or shared. In
 particular, if passed as an argument to a function it may not be used
 again.
 
@@ -411,7 +411,7 @@ in sinks is a special case of mapping.
 > dndel' :: Snk (NN a) -> Snk a
 > dndel' = mapSnk shift
 
-The duals are easily implementd by case analysis, following the mutual
+The duals are easily implemented by case analysis, following the mutual
 recursion pattern introduced above.
 
 > dndel :: Src (NN a) -> Src a
@@ -454,7 +454,7 @@ data. We could write the following:
 > match :: Eff -> (a -> Snk a) -> Snk a
 > match nil' cons' k = await k nil' cons'
 
-However, calling \var{await} may break linearity, so we will refrain to use
+However, calling \var{await} may break linearity, so we will instead use
 \var{match} in the following.
 
 Another useful function is the equivalent of \var{take} on lists.
