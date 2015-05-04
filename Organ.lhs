@@ -801,7 +801,7 @@ App: Stream-Based Parsing
 
 A source of unstructured data can be turned into a source of
 structured data, given a parser of that input.  This conversion is
-useful for example to turn an XML file inputted as stream of
+useful for example to turn an XML file from stream of
 characters into a stream of (opening and closing) tags.
 
 We beging by defining a pure parsing structure, modeled after the
@@ -825,7 +825,7 @@ The monading interface can then be built using shift and unshift:
 >   return x  = P $ \fut -> fut x
 >   P f >>= k = P (\fut -> f (\a -> let P g = k a in g fut))
 
-The essential parsing ingredient, disjunction, rests on the
+The essential parsing ingredient, choice, rests on the
 possibility to weave processes together, always picking that which
 fails as last resort:
 
@@ -1264,8 +1264,8 @@ expensive and distributable over computation units.
 The above implementation naively spawns a thread for every element.
 In reality one will most likely want to divide the stream into
 chunks before spawning threads. Because strategies are separate
-components, if it turns out that a bad choice was made it is easy to
-swap a strategy for another.
+components, a bad choice is easily remidied by swapping one strategy
+for another.
 
 \paragraph{Buffering}
 
