@@ -1471,8 +1471,6 @@ there is no support for timely release of resources, such things need
 to be dealt with outside of the stream framework. Additionally, even
 conceptually effect-free streams rely on running IO effects.
 
-TODO: Josef: check
-
 Iteratees
 ---------
 
