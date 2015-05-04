@@ -608,6 +608,12 @@ Before implementing concatenation we will first implement append as it
 is both independently useful and important when defining
 concatenation.
 
+Concatentation is defined using the two auxiliary functions
+\var{concatSnkSrc} and \var{concatAux}. The function
+\var{concatSnkSrc} will take a sink and produce a new sink which can
+take a sequence of sources. All of these sources will be fed into the
+sink, one after the other. Appending all the sources together happens
+in \var{concatAux}.
 
 > concatSrcSrc = flipSnk concatSnkSrc
 
@@ -657,7 +663,7 @@ than producing them.
 
 If sinks are not comonads, are there some other structures that they
 implement? The package contravariant on hackage gives two classes;
-\var{Divisible} and \var{Decidable\, which are superclasses of
+\var{Divisible} and \var{Decidable}, which are superclasses of
 \var{Contravariant}, a class for contravariant functors. They are
 defined as follows:
 
@@ -678,6 +684,11 @@ elements are split and fed to two different sinks.
 >     where (b,c) = div a
 >
 >   conquer = plug
+
+Using \var{divide} it is possible to split data and feed it to several
+sinks. Producing and consuming elements still happens in lock-step;
+both sinks consume their respective elements before the source gets to
+produce a new element. \var{conquer} is a unit for \var{divide}.
 
 The class \var{Decidable} has the methods \var{lose} and \var{choose}:
 
