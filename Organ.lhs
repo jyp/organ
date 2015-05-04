@@ -1172,6 +1172,10 @@ no data dependency. Therefore they may be run in any order, including
 concurrently (we will see in the next section how this situation
 generalises).
 
+TODO: The lines (1) and (2) really do need to happen in that order.
+If they are performed concurrently then lines will be read in
+a very strange order.
+
 The second example is a co-sink that sends data to a file.
 
 > coFileSink :: Handle -> CoSnk String
