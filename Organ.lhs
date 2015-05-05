@@ -218,18 +218,17 @@ diversion.
 Streams
 =======
 
-As it should be clear by now, we embrace the principle of
-duality. This approach is refected in the design of the streaming
-library: we will not only have a type for sources of data but also a
-type for sinks. For example, a simple stream processor reading from a
-single source and writing to a single sink will be given the following
-type:
+Our guiding design principle is duality. This principle is refected in
+the design of the streaming library: we will not only have a type for
+sources of data but also a type for sinks. For example, a simple
+stream processor reading from a single source and writing to a single
+sink will be given the following type:
 
 \begin{spec}
 simple :: Src a -> Snk a -> Eff
 \end{spec}
 
-We will make sure that \var{Sink} is the negation of a source (and vice
+We will make sure that \var{Snk} is the negation of a source (and vice
 versa), and thus the type of the above program may equivalently have
 been written as follows:
 
@@ -244,7 +243,7 @@ unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
 \end{spec}
 Familiarity with duality will be crucial in the later sections of this paper.
 
-We will define sources and sinks by mutual recursion. Producing a
+We define sources and sinks by mutual recursion. Producing a
 source means to select if some more is available (\var{Cons}) or not
 (\var{Nil}). If there is data, one must then produce a data item and
 *consume* a sink.
@@ -267,14 +266,17 @@ Linearity
 
 For streams to be used safely, one cannot discard nor duplicate them,
 for otherwise effects may be discarded and duplicated, which is
-dangerous.  Indeed, the same file could be closed twice, or not at
-all.  For example, the last action of a sink will typically be closing
-the file. This can be guaranteed only if the actions are run until
-reaching the end of the pipe (either \var{Full} or \var{Nil}).
+dangerous.  For example, the same file could be closed twice, or not
+at all.  Indeed, the last action of a sink will typically be closing
+the file. Timely closing of the sink can only be guaranteed if the
+actions are run until reaching the end of the pipe (either \var{Full}
+or \var{Nil}). In the rest of the section we precisely define the condition
+that programs need to respect in order to safely use our streams.
 
-We first define an effectful type as a type which mentions \var{Eff}
-in its definition. We say that a variable with an effectful type is
-itself effectful.
+We first notion that we need to define is that of an effectful type.
+A type is deemed effectful iff it mentions \var{Eff} in its
+definition. We say that a variable with an effectful type is itself
+effectful.
 
 The linearity convention is then respected iff:
 
@@ -287,12 +289,13 @@ will be in charged of consuming it).
 
 3. A type variable α can be instantiated to an effectful type only if
 it occurs in an effecful type. (For example it is ok to construct
-Source (Source a), because Source is already effectful).
+$\var{Src}\,(\var{Src}\,a)$, because \var{Src α} is already effectful).
 
 
 In this paper, the linearity convention is enforced by manual
-inspection. Manual inspection is unreliable, but fortunately
-implementing a linearity checker is straightforward.
+inspection. Manual inspection is unreliable, but we expect
+implementing a linearity checker to be straightforward. (See
+sec. \ref{rw-linearity})
 
 
 Basics
