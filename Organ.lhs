@@ -1,6 +1,10 @@
-% A Linear Approach to Streaming
+% Resource-Aware Streams: A Linear Approach
 
  <!--
+
+Possible titles:
+
+- A Linear approach to streaming
 
 > {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms, BangPatterns, TypeSynonymInstances, FlexibleInstances  #-}
 > module Organ where
@@ -16,16 +20,17 @@
 -->
 
 \begin{abstract}
-We present an alternative paradigm for IO in Haskell.
+In this paper, we present a novel stream-programming library for
+Haskell.  As other coroutine-based stream libraries, our library
+allows synchronous execution, which implies that effects are run in
+lockstep an no bufferring occurs.
 
-- based on continuations
-- linear type-checking helps programmer ensure program correctness
+A novelty of our implementation is that it allows to locally introduce
+buffering or parallelism. The parallel opportunities or buffering
+requirements are indicated by the type-system.
 
-Application: stream processing
-
-- API for allocation-free stream processing
-- with escape hatch
-- making parallelism opportunities explicit
+Our library is based on a number of generally applicable design
+principles, adapted from the theory of Girard's Linear Logic.
 \end{abstract}
 
 \category{D.1.1}{Applicative (Functional) Programming}{}
