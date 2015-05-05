@@ -1809,3 +1809,8 @@ memory.
 >        else do
 >          x =<< hGetLine h          -- (1)
 >          xs $ Cont $ coFileSrc h   -- (2)
+
+
+> cpy = do
+>   h <- openFile "Organ.lhs" ReadMode
+>   forward (coFileSrc' h) (coFileSink "test")
