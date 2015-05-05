@@ -558,10 +558,13 @@ convenient to give them the following aliases:
 > infixr -!
 > infixl -?
 
-Appending and differences interact in the expected way:
+Appending and differences interact in the expected way: the following
+equalities hold.
 
-> prop_diff1 t s1 s2 = t -? (s1 <> s2) == t -? s2 -? s1
-> prop_diff2 t1 t2 s = (t1 <> t2) -! s == t1 -! t2 -! s
+\begin{spec}
+t -? (s1 <> s2) == t -? s2 -? s1
+(t1 <> t2) -! s == t1 -! t2 -! s
+\end{spec}
 
  <!--
 
@@ -1185,12 +1188,10 @@ co-sinks. The first example shows how to provide a file as a co-source:
 Compared to \var{fileSrc}, the difference is that this function can
 decide the ordering of effects. That is, the effects (1) and (2) have
 no data dependency. Therefore they may be run in any order, including
-concurrently (we will see in the next section how this situation
-generalises).
-
-TODO: The lines (1) and (2) really do need to happen in that order.
-If they are performed concurrently then lines will be read in
-a very strange order.
+concurrently. (However if (1) and (2) are not run sequentially, the
+order of the data in the stream will not correspond to the order of
+data in the file.) We will see in the next section how this situation
+generalises.
 
 The second example is a co-sink that sends data to a file.
 
@@ -1202,8 +1203,8 @@ The second example is a co-sink that sends data to a file.
 Compared to \var{fileSnk}, the difference is that one does not control
 the order of execution of effects. The effect of writing the current
 line is put in a data structure, and its execution is up to the
-co-source which will eventually connect to the co-sink. Thus, the
-order of lines in the file will depend on the order of effects chosen
+co-source which eventually connects to the co-sink. Thus, the
+order of writing lines in the file depends on the order of effects chosen
 in the co-source connected to this co-sink.
 
 In sum, using co-sources and co-sinks shifts the flow of control from
@@ -1216,7 +1217,7 @@ Asynchronicity
 --------------
 
 We have seen so far that synchronicity gives useful guarantees, but
-restricts the kind of programs one can write. In this section, we will
+restricts the kind of programs one can write. In this section, we
 provide primitives which allow forms of asynchronous programming within
 our framework.
 The main benefit of sticking to our framework in this case is that
@@ -1248,7 +1249,7 @@ Implementing the conversions is then straightforward:
 > srcToCoSrc strat s s0 = shiftSrc s $ \ s1 -> strat s1 s0
 > coSnkToSnk strat s s0 = shiftSrc s $ \ s1 -> strat s0 s1
 
-There are (infinitely) many possible concurrency strategies. However,
+There are (infinitely) many possible scheduling strategies. However,
 in practice we think that one will mostly be combining either of the
 following two flavours: sequential and concurrent.  The simplest one
 (used in \var{coFileSrc}) is sequential execution, and is defined by
@@ -1707,7 +1708,7 @@ source is empty.
 Proof of associativity of append for sinks
 ==========================================
 
-Nil case.
+\var{Nil} case.
 
 \begin{spec}
     ((t1 <> t2) <> t3) Nil
@@ -1723,7 +1724,7 @@ Nil case.
     (t1 <> (t2 <> t3)) Nil
 \end{spec}
 
-Cons case.
+ \var{Cons} case.
 
 \begin{spec}
     ((t1 <> t2) <> t3) (Cons a s0)
@@ -1737,7 +1738,7 @@ Cons case.
     (t1 <> (t2 <> t3)) (Cons a s0)
 \end{spec}
 
-Full case.
+ \var{Full} case.
 \begin{spec}
   ((t1 <> t2) -! s) Full
 == -- by def
@@ -1748,7 +1749,7 @@ Full case.
   (t1 -! (t2 -! s)) Full
 \end{spec}
 
-Cont case.
+ \var{Cont} case.
 \begin{spec}
   ((t1 <> t2) -! s) (Cont t0)
 == -- by def
@@ -1798,3 +1799,13 @@ list by extracting all the contents out of a source. This operation provides a
 bridge to pure list-processing code, by loading all the data to
 memory.
 
+> coFileSrc' :: Handle -> CoSrc String
+> coFileSrc' h Nil = hClose h
+> coFileSrc' h (Cons x xs) = do
+>   e <- hIsEOF h
+>   if e then do
+>          hClose h
+>          xs Full
+>        else do
+>          x =<< hGetLine h          -- (1)
+>          xs $ Cont $ coFileSrc h   -- (2)
