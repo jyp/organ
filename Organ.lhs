@@ -1185,6 +1185,8 @@ co-sinks. The first example shows how to provide a file as a co-source:
 >          x =<< hGetLine h          -- (1)
 >          xs $ Cont $ coFileSrc h   -- (2)
 
+TODO: kind of nonsense; if effects are flipped the file will be closed before reading any line.
+
 Compared to \var{fileSrc}, the difference is that this function can
 decide the ordering of effects. That is, the effects (1) and (2) have
 no data dependency. Therefore they may be run in any order, including
@@ -1193,7 +1195,7 @@ order of the data in the stream will not correspond to the order of
 data in the file.) We will see in the next section how this situation
 generalises.
 
-The second example is a co-sink that sends data to a file.
+The second example is a infinite co-sink that sends data to a file.
 
 > coFileSink :: Handle -> CoSnk String
 > coFileSink h Full = hClose h
@@ -1248,6 +1250,8 @@ Implementing the conversions is then straightforward:
 
 > srcToCoSrc strat s s0 = shiftSrc s $ \ s1 -> strat s1 s0
 > coSnkToSnk strat s s0 = shiftSrc s $ \ s1 -> strat s0 s1
+
+TODO: commutative monoid, etc.
 
 There are (infinitely) many possible scheduling strategies. However,
 in practice we think that one will mostly be combining either of the
@@ -1799,18 +1803,26 @@ list by extracting all the contents out of a source. This operation provides a
 bridge to pure list-processing code, by loading all the data to
 memory.
 
-> coFileSrc' :: Handle -> CoSrc String
-> coFileSrc' h Nil = hClose h
-> coFileSrc' h (Cons x xs) = do
->   e <- hIsEOF h
->   if e then do
->          hClose h
->          xs Full
->        else do
->          x =<< hGetLine h          -- (1)
->          xs $ Cont $ coFileSrc h   -- (2)
+> coFileSrc' :: String -> CoSrc String
+> coFileSrc' f k = do
+>   h <- openFile f ReadMode
+>   coFileSrc'h h k
 
+> coFileSrc'h :: Handle -> CoSrc String
+> coFileSrc'h h Nil = return ()
+> coFileSrc'h h (Cons x xs) = do
+>          xs $ Cont $ coFileSrc'h h   -- (2)
+>          x =<< hGetLine h          -- (1)
+
+
+> coFileSink' :: Handle -> CoSnk String
+> coFileSink' h Full = return ()
+> coFileSink' h (Cont c) = c (Cons  (hPutStrLn h)
+>                                  (coFileSink' h))
 
 > cpy = do
->   h <- openFile "Organ.lhs" ReadMode
->   forward (coFileSrc' h) (coFileSink "test")
+>   h' <- openFile "t" WriteMode
+>   forward  (takeSrc 10 $ coFileSink' h') (coFileSrc' "Organ.lhs")
+>   hClose h'
+
+NOTE: commutative monads is SPJ Open Challenge #2 in his 2009 Talk "Wearing the Hair Shirt -- A retrospective on haskell"
