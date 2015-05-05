@@ -138,23 +138,26 @@ processors will be run in-between reading and printing. )
 
 The contributions of this paper are
 
-* A Haskell library for streaming `IO`, built on the linearity
-principle. Besides supporting compositionality as outlined above, it
-features two novel aspects:
+* The formulation of principles for compositional resource-aware
+programming in Haskell (resources include memory and files). The
+principles are linearity, duality, and polarisation. While borrowed
+from linear logic, as far as we know they have not been applied to
+Haskell programming before.
+
+* An embodiment of the above principles, in the form of a Haskell
+library for streaming `IO`. Besides supporting compositionality as
+outlined above, our library features two concrete novel aspects:
 
   1. A more lightweight design than state-of-the-art co-routine based
-    libraries, afforded by the linearity convention.
+    libraries.
 
   2. Support for explicit buffering and control structures, while
     still respecting compositionality.
 
-* Besides, the approach followed for developing this library
-generalises to other types than stream. (TODO?)
 
-TODO: outline
 
-Preliminary: negations and continuations
-========================================
+Preliminary: negation and continuations
+=======================================
 
 In this section we recall the basics of continuation-based
 programming. Readers familiar with continuations only need to read
@@ -1497,9 +1500,9 @@ the linearity constraint.
 A second advantage of our library is that effects are not required to
 be monads. Indeed, the use of continuations already provide the
 necessary structure to combine computations (indeed, double negation
-is a monad). We believe that having a single way to combine
-computations is a simplification in design which may make our library
-more approachable.
+is a monad). We believe that having a single way to bind intermediate
+results (continuations vs. both continuations and monads) is a
+simplification in design which may make our library more approachable.
 
 The presence of source and sinks also clarifies how to build complex
 types. Indeed, iteratee-based libraries heavily use the following
@@ -1524,8 +1527,8 @@ system, as mismatching polarities.
 In more recent work \citet{kiselyov_lazy_2012} present a
 continuation-based pretty printer, which fosters a more stylized used
 of continuations, closer to what we advocate here. Producers and
-consumers (sources and sinks) are defined more simply, using simple
-negations:
+consumers (sources and sinks) are defined more simply, using types
+which correpond more directly to negations:
 
 \begin{spec}
 type GenT e m = ReaderT (e -> m ()) m
@@ -1535,8 +1538,8 @@ type Transducer m1 m2 e1 e2 =
   Producer m1 e1 -> Producer m2 e2
 \end{spec}
 
-Yet, linearity is still not emphasised, the use of a monad (rather
-than monoid) persists, and mismatching polarities are not discussed.
+Yet, linearity is still not emphasised, the use of a monad rather
+than monoid persists, and mismatching polarities are not discussed.
 
 Session Types
 -------------
