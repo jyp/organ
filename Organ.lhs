@@ -687,8 +687,8 @@ than producing them.
 > class Contravariant f where
 >   contramap :: (b -> a) -> f a -> f b
 
-> instance Contravariant Snk where
->   contramap = mapSnk
+-- > instance Contravariant Snk where
+-- >   contramap = mapSnk
 
 
 > sinkToSnk :: Sink' a -> Snk a
@@ -711,16 +711,16 @@ defined as follows:
 The method \var{divide} can be seen as a dual of \var{zipWith} where
 elements are split and fed to two different sinks.
 
-> instance Divisible Snk where
->   divide div snk1 snk2 Nil = snk1 Nil >> snk2 Nil
->   divide div snk1 snk2 (Cons a ss) =
->     snk1 (Cons b $ \ss1 ->
->     snk2 (Cons c $ \ss2 ->
->     shiftSnk (divide div (sinkToSnk ss1)
->                          (sinkToSnk ss2)) ss))
->     where (b,c) = div a
->
->   conquer = plug
+-- > instance Divisible Snk where
+-- >   divide div snk1 snk2 Nil = snk1 Nil >> snk2 Nil
+-- >   divide div snk1 snk2 (Cons a ss) =
+-- >     snk1 (Cons b $ \ss1 ->
+-- >     snk2 (Cons c $ \ss2 ->
+-- >     shiftSnk (divide div (sinkToSnk ss1)
+-- >                          (sinkToSnk ss2)) ss))
+-- >     where (b,c) = div a
+-- >
+-- >   conquer = plug
 
 Using \var{divide} it is possible to split data and feed it to several
 sinks. Producing and consuming elements still happens in lock-step;
@@ -736,17 +736,17 @@ The class \var{Decidable} has the methods \var{lose} and \var{choose}:
 The function \var{choose} can split up a sink so that some elements
 go to one sink and some go to another.
 
-> instance Decidable Snk where
->   choose choice snk1 snk2 Nil = snk1 Nil >> snk2 Nil
->   choose choice snk1 snk2 (Cons a ss)
->     | Left b <- choice a = snk1 (Cons b $ \snk1' ->
->       shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
->   choose choice snk1 snk2 (Cons a ss)
->     | Right c <- choice a = snk2 (Cons c $ \snk2' ->
->       shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
->
->   lose f Nil = return ()
->   lose f (Cons a ss) = ss (Cont (lose f))
+-- > instance Decidable Snk where
+-- >   choose choice snk1 snk2 Nil = snk1 Nil >> snk2 Nil
+-- >   choose choice snk1 snk2 (Cons a ss)
+-- >     | Left b <- choice a = snk1 (Cons b $ \snk1' ->
+-- >       shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
+-- >   choose choice snk1 snk2 (Cons a ss)
+-- >     | Right c <- choice a = snk2 (Cons c $ \snk2' ->
+-- >       shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
+-- >
+-- >   lose f Nil = return ()
+-- >   lose f (Cons a ss) = ss (Cont (lose f))
 
 
 Table of effect-free functions
@@ -1182,18 +1182,17 @@ co-sinks. The first example shows how to provide a file as a co-source:
 >          hClose h
 >          xs Full
 >        else do
->          x =<< hGetLine h          -- (1)
->          xs $ Cont $ coFileSrc h   -- (2)
+>          x' <- hGetLine h
+>          x x'                     -- (1)
+>          xs $ Cont $ coFileSrc h  -- (2)
 
-TODO: kind of nonsense; if effects are flipped the file will be closed before reading any line.
 
 Compared to \var{fileSrc}, the difference is that this function can
-decide the ordering of effects. That is, the effects (1) and (2) have
-no data dependency. Therefore they may be run in any order, including
-concurrently. (However if (1) and (2) are not run sequentially, the
-order of the data in the stream will not correspond to the order of
-data in the file.) We will see in the next section how this situation
-generalises.
+decide the ordering of effects run a co-sink connected to it. That is,
+the lines (1) and (2) have no data dependency. Therefore they may be
+run in any order. (Blindly doing so is a bad idea though, as the
+\var{Full} action on the sink will be run before all other actions.)
+We will see in the next section how this situation generalises.
 
 The second example is a infinite co-sink that sends data to a file.
 
@@ -1227,7 +1226,7 @@ asynchronous behaviour is cornered to the explicit usages of these
 primitives. That is, the benefits of synchronous programming still
 hold locally.
 
-\paragraph{Concurrency}
+\paragraph{Scheduling}
 
 When converting a \var{Src} to a \var{CoSrc} (or dually \var{CoSnk} to
 a \var{Snk}), we have two streams which are ready to respond to
@@ -1238,42 +1237,44 @@ file source to a file co-source.
 In general, given a scheduling strategy, we can implement the above
 two conversions:
 
-> srcToCoSrc :: Strategy a -> Src a -> CoSrc a
-> coSnkToSnk :: Strategy a -> CoSnk a -> Snk a
+> srcToCoSrc :: Schedule a -> Src a -> CoSrc a
+> coSnkToSnk :: Schedule a -> CoSnk a -> Snk a
 
 We define a strategy as the reconciliation between a source and a
 co-sink:
 
-> type Strategy a = Source' a -> Source' (N a) -> Eff
+> type Schedule a = Source' a -> Source' (N a) -> Eff
 
 Implementing the conversions is then straightforward:
 
 > srcToCoSrc strat s s0 = shiftSrc s $ \ s1 -> strat s1 s0
 > coSnkToSnk strat s s0 = shiftSrc s $ \ s1 -> strat s0 s1
 
-TODO: commutative monoid, etc.
+What are possible strategies? The simplest, and most natural one is
+sequential execution: looping through both sources and
+match the consumptions/productions elementwise, as follows.
 
-There are (infinitely) many possible scheduling strategies. However,
-in practice we think that one will mostly be combining either of the
-following two flavours: sequential and concurrent.  The simplest one
-(used in \var{coFileSrc}) is sequential execution, and is defined by
-looping through both sources and match the consumptions/productions
-elementwise.
-
-> sequentially :: Strategy a
+> sequentially :: Schedule a
 > sequentially Nil (Cons _ xs) = xs Full
 > sequentially (Cons _ xs) Nil = xs Full
-> sequentially (Cons x xs) (Cons x' xs') = do
->   x' x
->   (shiftSrc xs  $ \sa ->
->    shiftSrc xs' $ \sna ->
->    sequentially sa sna)
+> sequentially (Cons x xs) (Cons x' xs') =
+>   x' x <>   (shiftSrc xs  $ \sa ->
+>              shiftSrc xs' $ \sna ->
+>              sequentially sa sna)
 
-Another possible strategy is concurrent execution. This strategy is
-useful if one expects production or consumption of elements to be
-expensive and distributable over computation units.
+When effects are arbitrary IO actions, sequential execution is the
+only sensible strategy: indeed, the sources and sinks expect their
+effects to be run in the order prescribed by the stream. Swapping the
+arguments to `<>` in the above means that \var{Full} effects will be
+run first, which spells disaster.
 
-> concurrently :: Strategy a
+However, in certain cases running effects out of order may make
+sense. For example, if the monoid of effects is commutative (or if the
+programmer is confident that execution order does not matter), one can
+shuffle the order of execution of effects. This re-ordering can be taken
+advantage of to run effects concurrently, as follows:
+
+> concurrently :: Schedule a
 > concurrently Nil (Cons _ xs) = xs Full
 > concurrently (Cons _ xs) Nil = xs Full
 > concurrently (Cons x xs) (Cons x' xs') = do
@@ -1282,11 +1283,13 @@ expensive and distributable over computation units.
 >    shiftSrc xs' $ \sna ->
 >    concurrently sa sna)
 
-The above implementation naively spawns a thread for every element.
-In reality one will most likely want to divide the stream into
-chunks before spawning threads. Because strategies are separate
-components, a bad choice is easily remidied by swapping one strategy
-for another.
+The above strategy is useful if one expects production or consumption
+of elements to be expensive and distributable over computation units.
+While the above implementation naively spawns a thread for every
+element, in reality one will most likely want to divide the stream
+into chunks before spawning threads. Because strategies are separate
+components, a bad choice is easily remedied to by swapping one
+strategy for another.
 
 \paragraph{Buffering}
 
@@ -1797,7 +1800,6 @@ ScratchPad
 > type Push a = N (Int -> N a)
 
 
--->
 Yet, if one so decides, one can explicity build a
 list by extracting all the contents out of a source. This operation provides a
 bridge to pure list-processing code, by loading all the data to
@@ -1808,21 +1810,38 @@ memory.
 >   h <- openFile f ReadMode
 >   coFileSrc'h h k
 
-> coFileSrc'h :: Handle -> CoSrc String
-> coFileSrc'h h Nil = return ()
-> coFileSrc'h h (Cons x xs) = do
->          xs $ Cont $ coFileSrc'h h   -- (2)
->          x =<< hGetLine h          -- (1)
 
+> coFileSrc'h :: Handle -> CoSrc String
+> coFileSrc'h h Nil = hClose h
+> coFileSrc'h h (Cons x xs) = do
+>   e <- hIsEOF h
+>   if e then do
+>          hClose h
+>          xs Full
+>        else do
+>          x' <- hGetLine h
+>          xs $ Cont $ coFileSrc'h h 
+>          x x'                      
 
 > coFileSink' :: Handle -> CoSnk String
 > coFileSink' h Full = return ()
 > coFileSink' h (Cont c) = c (Cons  (hPutStrLn h)
->                                  (coFileSink' h))
+>                                   (coFileSink' h))
 
 > cpy = do
 >   h' <- openFile "t" WriteMode
->   forward  (takeSrc 10 $ coFileSink' h') (coFileSrc' "Organ.lhs")
+>   forward  (coFileSink' h') (srcToCoSrc reverted $ fileSrc "Organ.lhs")
 >   hClose h'
 
 NOTE: commutative monads is SPJ Open Challenge #2 in his 2009 Talk "Wearing the Hair Shirt -- A retrospective on haskell"
+
+> reverted :: Schedule a
+> reverted Nil (Cons _ xs) = xs Full
+> reverted (Cons _ xs) Nil = xs Full
+> reverted (Cons x xs) (Cons x' xs') = do
+>   (shiftSrc xs  $ \sa ->
+>    shiftSrc xs' $ \sna ->
+>    reverted sa sna)
+>   x' x
+
+-->
