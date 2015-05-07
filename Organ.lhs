@@ -641,14 +641,10 @@ is the concatenation of sources:
 
 > concatSrcSrc :: Src (Src a) -> Src a
 
-Before implementing concatenation we will first implement append as it
-is both independently useful and important when defining
-concatenation.
-
 Concatentation is defined using the two auxiliary functions
 \var{concatSnkSrc} and \var{concatAux}. The function
-\var{concatSnkSrc} will take a sink and produce a new sink which can
-take a sequence of sources. All of these sources will be fed into the
+\var{concatSnkSrc} takes a sink and produces a new sink which can
+take a sequence of sources (TODO: Josef: Jp does not understand this sentence). All of these sources are to be fed into the
 sink, one after the other. Appending all the sources together happens
 in \var{concatAux}.
 
@@ -664,6 +660,9 @@ in \var{concatAux}.
 > concatAux snk ssrc (Cons a s)
 >   = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
 
+(The monad laws can be proved by mutual induction, using a pattern
+similar to the monoid laws.)
+
 Given the duality between sources and sinks, and the fact that sources
 are monads, it might be tempting to draw the conclusion that sinks are
 comonads. This is not the case. To see why, consider that every
@@ -674,7 +673,7 @@ following type
 Snk a -> a
 \end{spec}
 
-There is no way to implement this function since sinks don't store
+There is no way to implement this function since sinks do not store
 elements so that they can be returned. Sinks consume elements rather
 than producing them.
 
@@ -687,8 +686,9 @@ than producing them.
 > class Contravariant f where
 >   contramap :: (b -> a) -> f a -> f b
 
--- > instance Contravariant Snk where
--- >   contramap = mapSnk
+
+> instance Contravariant Snk where
+>   contramap = mapSnk
 
 
 > sinkToSnk :: Sink' a -> Snk a
@@ -700,7 +700,7 @@ than producing them.
 
 If sinks are not comonads, are there some other structures that they
 implement? The package contravariant on hackage gives two classes;
-\var{Divisible} and \var{Decidable}, which are superclasses of
+\var{Divisible} and \var{Decidable}, which are superclasses (TODO: subclasses?) of
 \var{Contravariant}, a class for contravariant functors. They are
 defined as follows:
 
@@ -711,21 +711,21 @@ defined as follows:
 The method \var{divide} can be seen as a dual of \var{zipWith} where
 elements are split and fed to two different sinks.
 
--- > instance Divisible Snk where
--- >   divide div snk1 snk2 Nil = snk1 Nil >> snk2 Nil
--- >   divide div snk1 snk2 (Cons a ss) =
--- >     snk1 (Cons b $ \ss1 ->
--- >     snk2 (Cons c $ \ss2 ->
--- >     shiftSnk (divide div (sinkToSnk ss1)
--- >                          (sinkToSnk ss2)) ss))
--- >     where (b,c) = div a
--- >
--- >   conquer = plug
+> instance Divisible Snk where
+>   divide div snk1 snk2 Nil = snk1 Nil <> snk2 Nil
+>   divide div snk1 snk2 (Cons a ss) =
+>     snk1 (Cons b $ \ss1 ->
+>     snk2 (Cons c $ \ss2 ->
+>     shiftSnk (divide div (sinkToSnk ss1)
+>                          (sinkToSnk ss2)) ss))
+>     where (b,c) = div a
+>
+>   conquer = plug
 
-Using \var{divide} it is possible to split data and feed it to several
+By using \var{divide} it is possible to split data and feed it to several
 sinks. Producing and consuming elements still happens in lock-step;
 both sinks consume their respective elements before the source gets to
-produce a new element. \var{conquer} is a unit for \var{divide}.
+produce a new element. The \var{conquer} method is a unit for \var{divide}.
 
 The class \var{Decidable} has the methods \var{lose} and \var{choose}:
 
@@ -736,27 +736,26 @@ The class \var{Decidable} has the methods \var{lose} and \var{choose}:
 The function \var{choose} can split up a sink so that some elements
 go to one sink and some go to another.
 
--- > instance Decidable Snk where
--- >   choose choice snk1 snk2 Nil = snk1 Nil >> snk2 Nil
--- >   choose choice snk1 snk2 (Cons a ss)
--- >     | Left b <- choice a = snk1 (Cons b $ \snk1' ->
--- >       shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
--- >   choose choice snk1 snk2 (Cons a ss)
--- >     | Right c <- choice a = snk2 (Cons c $ \snk2' ->
--- >       shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
--- >
--- >   lose f Nil = return ()
--- >   lose f (Cons a ss) = ss (Cont (lose f))
+> instance Decidable Snk where
+>   choose choice snk1 snk2 Nil = snk1 Nil <> snk2 Nil
+>   choose choice snk1 snk2 (Cons a ss)
+>     | Left b <- choice a = snk1 (Cons b $ \snk1' ->
+>       shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
+>   choose choice snk1 snk2 (Cons a ss)
+>     | Right c <- choice a = snk2 (Cons c $ \snk2' ->
+>       shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
+>
+>   lose f Nil = return ()
+>   lose f (Cons a ss) = ss (Cont (lose f))
 
 
 Table of effect-free functions
 ------------------------------
 
-Many more effect-free functions can be implemented. We give here a
-menu of functions that we have implemented and whose implementation
-is available in the appendix.
-
-(implementable without reference to IO, preserving syncronicity)
+The above gives already an extensive API for sources and sinks, many
+more useful effect-free functions can be implemented on this basis. We
+give here a menu of functions that we have implemented, and whose
+implementation is available in the appendix.
 
 Zip two sources, and the dual.
 
@@ -839,7 +838,8 @@ parsing processes, defined as follows. The \var{Sym} constructor parses \var{Jus
 a symbol, or \var{Nothing} if the end of stream is reached. A process may
 also \var{Fail} or return a \var{Result} (and continue).
 
-TODO: continuing is not necessary for this application. Delete?
+TODO: continuing after result is not necessary for this
+application. Delete?
 
 > data P s res  =  Sym (Maybe s -> P s res)
 >               |  Fail
