@@ -23,14 +23,16 @@ Possible titles:
 In this paper, we present a novel stream-programming library for
 Haskell.  As other coroutine-based stream libraries, our library
 allows synchronous execution, which implies that effects are run in
-lockstep an no bufferring occurs.
+lockstep and no bufferring occurs.
 
 A novelty of our implementation is that it allows to locally introduce
-buffering or parallelism. The parallel opportunities or buffering
-requirements are indicated by the type-system.
+buffering or re-scheduling of effects. The buffering requirements (or
+re-scheduling opportunities) are indicated by the type-system.
 
-Our library is based on a number of generally applicable design
-principles, adapted from the theory of Girard's Linear Logic.
+Our library is based on a number of design principles, adapted from
+the theory of Girard's Linear Logic. These principles are applicable
+to any Haskell program where resource management (memory, IO, ...) is
+critical.
 \end{abstract}
 
 \category{D.1.1}{Applicative (Functional) Programming}{}
@@ -687,6 +689,10 @@ than producing them.
 >   contramap :: (b -> a) -> f a -> f b
 
 
+TODO: My GHC (7.8.4) complains with: Type synonym ‘Snk’ should have 1
+argument, but has been given none In the instance declaration for
+‘Contravariant Snk’
+
 > instance Contravariant Snk where
 >   contramap = mapSnk
 
@@ -1230,17 +1236,17 @@ hold locally.
 
 When converting a \var{Src} to a \var{CoSrc} (or dually \var{CoSnk} to
 a \var{Snk}), we have two streams which are ready to respond to
-pulling of data from them.  This means that concurrency opportunities
-arise, as we have seen an example above when manually converting the
-file source to a file co-source.
+pulling of data from them.  This means that effects must be scheduled
+explicitly, as we have seen an example above when manually converting
+the file source to a file co-source.
 
-In general, given a scheduling strategy, we can implement the above
-two conversions:
+In general, given a \var{Schedule}, we can implement the above two
+conversions:
 
 > srcToCoSrc :: Schedule a -> Src a -> CoSrc a
 > coSnkToSnk :: Schedule a -> CoSnk a -> Snk a
 
-We define a strategy as the reconciliation between a source and a
+We define a \var{Schedule} as the reconciliation between a source and a
 co-sink:
 
 > type Schedule a = Source' a -> Source' (N a) -> Eff
@@ -1250,8 +1256,8 @@ Implementing the conversions is then straightforward:
 > srcToCoSrc strat s s0 = shiftSrc s $ \ s1 -> strat s1 s0
 > coSnkToSnk strat s s0 = shiftSrc s $ \ s1 -> strat s0 s1
 
-What are possible strategies? The simplest, and most natural one is
-sequential execution: looping through both sources and
+What are possible scheduling strategies? The simplest, and most
+natural one is sequential execution: looping through both sources and
 match the consumptions/productions elementwise, as follows.
 
 > sequentially :: Schedule a
@@ -1263,15 +1269,15 @@ match the consumptions/productions elementwise, as follows.
 >              sequentially sa sna)
 
 When effects are arbitrary IO actions, sequential execution is the
-only sensible strategy: indeed, the sources and sinks expect their
+only sensible schedule: indeed, the sources and sinks expect their
 effects to be run in the order prescribed by the stream. Swapping the
 arguments to `<>` in the above means that \var{Full} effects will be
-run first, which spells disaster.
+run first, spelling disaster.
 
 However, in certain cases running effects out of order may make
-sense. For example, if the monoid of effects is commutative (or if the
-programmer is confident that execution order does not matter), one can
-shuffle the order of execution of effects. This re-ordering can be taken
+sense. If the monoid of effects is commutative (or if the programmer
+is confident that execution order does not matter), one can shuffle
+the order of execution of effects. This re-ordering can be taken
 advantage of to run effects concurrently, as follows:
 
 > concurrently :: Schedule a
@@ -1317,7 +1323,7 @@ deadlock will occur.
 
 Thus, one may prefer to use Concurrent Haskell channels as a buffering
 means, as they are bounded only by the size of the memory and do not
-rely on a feature of the operating system:
+rely on any special feature of the operating system:
 
 > chanCoSnk :: Chan a -> CoSnk a
 > chanCoSnk _ Full = return ()
@@ -1376,9 +1382,9 @@ We then have three situations when composing stream processors:
 1. Matching polarities. In this case behaviour is synchronous; no
 concurrency appears.
 
-2. Two positives. In this case the programmer needs to make a
-scheduling choice. This choice can be any static or dynamic processing
-order. In particular parallel processing is allowed.
+2. Two positives. In this case an explicit loop must process the
+streams.  If effects commute, the programmer may run effects out of
+order, potentially concurrently.
 
 3. Two negatives. In this case the streams must run in independent
 threads, and the programmer needs to make a choice for the communication
