@@ -1602,7 +1602,7 @@ occurrences of the encoded types. However, this work has not been
 carried out yet.
 
 The duality principle exposed here as already been taken advantage of
-to support fusible array types \cite{bernardy_composable_2014}. The
+to support fusible array types \cite{bernardy_composable_2015} (TODO: josef: perhaps your Haskell paper here?). The
 present paper has shown how to support effectful stream
 computations. One would naturally think that the same principle can be
 applied to other lazily-evaluated data structures, such as the game
@@ -1705,8 +1705,10 @@ source is empty.
 
 > unlinesSnk' :: String -> Snk String -> Snk Char
 > unlinesSnk' acc s Nil = s (Cons acc empty)
-> unlinesSnk' acc s (Cons '\n' s') = s (Cons (reverse acc) (linesSrc s'))
-> unlinesSnk' acc s (Cons c s') = s' (Cont $ unlinesSnk' (c:acc) s)
+> unlinesSnk' acc s (Cons '\n' s') = s (Cons   (reverse acc)
+>                                              (linesSrc s'))
+> unlinesSnk' acc s (Cons c s')
+>   = s' (Cont $ unlinesSnk' (c:acc) s)
 
 > untilSnk _ Nil = mempty
 > untilSnk p (Cons a s)
@@ -1717,7 +1719,8 @@ source is empty.
 > interleave s1 s2 (Cont s) = s1 (Cont (interleaveSnk s s2))
 
 > interleaveSnk snk src Nil = forward src snk
-> interleaveSnk snk src (Cons a s) = snk (Cons a (interleave s src))
+> interleaveSnk snk src (Cons a s)
+>   = snk (Cons a (interleave s src))
 
 > tee s1 t1 = flipSnk (collapseSnk t1) s1
 
@@ -1731,13 +1734,16 @@ source is empty.
 > unchunk = flipSnk chunkSnk
 
 > chunkSnk s Nil = s Nil
-> chunkSnk s (Cons x xs) = forward (fromList x `appendSrc` unchunk xs) s
+> chunkSnk s (Cons x xs)
+>   = forward (fromList x `appendSrc` unchunk xs) s
 
 > toList s k = shiftSrc s (toListSnk k)
 
 > toListSnk :: N [a] -> Snk a
 > toListSnk k Nil = k []
 > toListSnk k (Cons x xs) = toList xs $ \xs' -> k (x:xs')
+
+\newpage
 
 Proof of associativity of append for sinks
 ==========================================
@@ -1797,6 +1803,7 @@ Proof of associativity of append for sinks
 \end{spec}
 
   <!--
+
 ScratchPad
 ==========
 
