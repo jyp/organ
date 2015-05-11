@@ -296,7 +296,7 @@ will be in charged of consuming it).
 
 3. A type variable α can be instantiated to an effectful type only if
 it occurs in an effectful type. (For example it is OK to construct
-$\var{Src}\,(\var{Src}\,a)$, because \var{Src α} is already effectful).
+$\var{Src}\,(\var{Src}\,a)$, because $\var{Src}\, α$ is already effectful).
 
 
 In this paper, the linearity convention is enforced by manual
