@@ -858,12 +858,9 @@ parsing processes, defined as follows. The \var{Sym} constructor parses \var{Jus
 a symbol, or \var{Nothing} if the end of stream is reached. A process may
 also \var{Fail} or return a \var{Result} (and continue).
 
-TODO: discuss: continuing after result is not necessary for this
-application. Delete?
-
 > data P s res  =  Sym (Maybe s -> P s res)
 >               |  Fail
->               |  Result res (P s res)
+>               |  Result res
 
 A parser producing $a$ the double negation of $a$:
 
@@ -876,34 +873,20 @@ The monadic interface can then be built using shift and unshift:
 >   P f >>= k = P (\fut -> f (\a -> let P g = k a in g fut))
 
 The essential parsing ingredient, choice, rests on the
-ability to weave processes together, always picking that which
-fails as last resort:
+ability to weave processes together; picking that which
+succeeds first, and that which fails as last resort:
 
 > weave :: P s a -> P s a -> P s a
 > weave Fail x = x
 > weave x Fail = x
-> weave (Result res x) y = Result res (weave x y)
-> weave x (Result res y) = Result res (weave x y)
+> weave (Result res) y = Result res
+> weave x (Result res) = Result res
 > weave (Sym k1) (Sym k2)
 >     = Sym (\s -> weave (k1 s) (k2 s))
 
 > (<|>) :: Parser s a -> Parser s a -> Parser s a
 > P p <|> P q = P (\fut -> weave (p fut) (q fut))
 
-
- <!--
-
-> longestResultSnk :: forall a s. P s a -> N (Maybe a) -> Snk s
-> longestResultSnk p0 ret = scan p0 Nothing
->  where
->   scan :: P s a -> Maybe a -> Snk s
->   scan (Result res p)  _         xs     = scan p (Just res) xs
->   scan Fail            mres      xs     = ret mres >> fwd xs Full
->   scan (Sym f)         mres      xs     = case xs of
->     Nil        -> scan (f Nothing) mres Nil
->     Cons x cs  -> forward cs (scan (f $ Just x) mres)
-
--->
 
 Parsing then reconciles the execution of the process with the
 traversal of the source. In particular, whenever a result is
@@ -914,7 +897,7 @@ the stream are closed.
 > parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x Fail
 >  where
 >   scan :: P s a -> Snk a -> Snk s
->   scan (Result res _)  ret        xs     = ret
+>   scan (Result res  )  ret        xs     = ret
 >                                            (Cons res $ parse q $ fwd xs)
 >   scan Fail            ret        xs     = ret Nil <> fwd xs Full
 >   scan (Sym f)         mres       xs     = case xs of
