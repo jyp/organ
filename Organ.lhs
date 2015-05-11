@@ -16,7 +16,8 @@
 -->
 
 \begin{abstract}
-We present an alternative paradigm for IO in Haskell.
+
+We present an alternative approach IO in Haskell.
 
 - based on continuations
 - linear type-checking helps programmer ensure program correctness
@@ -26,6 +27,7 @@ Application: stream processing
 - API for allocation-free stream processing
 - with escape hatch
 - making parallelism opportunities explicit
+
 \end{abstract}
 
 \category{D.1.1}{Applicative (Functional) Programming}{}
@@ -1410,7 +1412,7 @@ bring efficient array programming facilities to functional programming
 \citep{bernardy_composable_2015}.  TODO: josef: other citations
 
 This concept is central in the literature on Girard's linear logic
-(\citep{laurent_etude_2002,zeilberger_logical_2009}). However, in the
+\citep{laurent_etude_2002,zeilberger_logical_2009}. However, in the
 case of streams, this idea dates back at least to
 \citet{jackson_principles_1975} (\citet{kay_you_2008} gives a good
 summary of Jacksons' insight).
@@ -1538,9 +1540,33 @@ class), which does not require abiding to linearity.
 Future Work
 ===========
 
-Beyond Haskell: native support for linear types. Even classical!
+As we see it, a natural next step for the present work is to show that
+intermediate sources and sinks can be deforested. As it stands, we
+believe that a standard approach
+\cite{gill_short_1993,svenningsson_shortcut_2002,coutts_stream_2007}
+should work: 1. encode sources (and sinks) as non-recursive data types
+2. show that standard evaluation rules remove the intemediate
+occurences of the encoded types. However, this work has not been
+carried out yet.
 
-Fusion
+The duality principle exposed here as already been taken advantage of
+to support fusible array types (TODO cite). The present paper has
+shown how to support effectful stream computations. One would
+naturally think that the same principle can be applied to other
+lazily-evaluated data structures, such as the game trees discussed by
+\citet{hughes_functional_1989}: as far as we know this remains to be
+investigated.
+
+Another line of development would be to implement language support for
+the linearity convention, directly in Haskell. There has been many
+proposals to extend functional languages with linear types (see for
+example \cite[Ch. 9]{tov_practical_2012} for a survey). These
+proposals are often rather involved, because they typically support
+advanced forms of polymorphism allowing to abstract over the linearity
+of an argument. The linearity convention that we use here calls for no
+such complexity, therefore we hope it may be enough of a motivation to
+add simple linear type support in research-grade Haskell compilers.
+
 
 Conclusion
 ==========
