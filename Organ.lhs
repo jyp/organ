@@ -31,8 +31,8 @@ re-scheduling opportunities) are indicated by the type-system.
 
 Our library is based on a number of design principles, adapted from
 the theory of Girard's Linear Logic. These principles are applicable
-to any Haskell program where resource management (memory, IO, ...) is
-critical.
+to the design of any Haskell structure where resource management
+(memory, IO, ...) is critical.
 \end{abstract}
 
 \category{D.1.1}{Applicative (Functional) Programming}{}
@@ -60,7 +60,7 @@ construct complex programs by pipelining simple list transformation
 functions. Indeed, while strict evaluation forces to fully reify each
 intermediate result between each computational step, lazy
 evaluation allows to run all the computations concurrently, often
-without ever allocating more that a single intermediate result at a time.
+without ever allocating more that a single intermediate element at a time.
 
 Unfortunately, lazy evaluation suffers from two drawbacks.  First, it
 has unpredictable memory behavior. Consider the following function
@@ -104,44 +104,47 @@ main = do  inFile <- openFile "foo" ReadMode
            putStr contents
 \end{spec}
 
-Indeed, the \var{putStr} and \var{hClose} command act on unrelated
+Indeed, the \var{putStr} and \var{hClose} commands act on unrelated
 resources, and thus swapping them should have no observable effect.
 However, while the first program prints the `foo` file, the second one
 prints nothing.  Indeed, because \var{hGetContents} reads the file
 lazily, the \var{hClose} operation has the effect to truncate the
 list. In the first program, printing the contents force reading the
 file. One may argue that \var{hClose} should not be called in the
-first place. But then, closing the handle happens only when the
+first place --- but then, closing the handle happens only when the
 \var{contents} list can be garbage collected (in full), and relying on
 garbage collection for cleaning resources is brittle; furthermore
 this effect compounds badly with the first issue discussed above.  If
 one wants to use lazy effectful computations, again, the
 compositionality principle is lost.
 
-In this paper, we propose to tackle both of these problems, by means
-of a new representation for streams of data, and a convention on how
-to use streams. The convention to respect is *linearity*. In fact, the
-ideas presented in this paper are heavily inspired by study of
-Girard's linear logic \cite{girard_linear_1987}, and one way to read
-this paper is as an advocacy for linear types support in Haskell.
+In this paper, we propose to tackle both of these issues by mimicing
+the computational behaviour of Girard's linear logic
+\cite{girard_linear_1987} in Haskell. In fact, one way to read this
+paper is as an advocacy for linear types support in Haskell. While
+Kiselyov's *iteratees* (\citeyear{kiselyov_iteratees_2012}) already
+solves the issues described above, our grounding in linear logic
+allows us to support more stream programs, as we discuss below.
 
-How does our approach fare on the issues identified above? First,
-using our solution, the composition of two stream processors is
-guaranteed not to allocate more memory than the sum of its components.
-If the stream behaviors do not match, the types will not match
-either. It is however be possible to adjust the types by adding
-explicit buffering, in a natural manner:
+How does our approach fare on the issues identified above? First, as
+Kiselyov's, using our solution the composition of two stream
+processors is guaranteed not to allocate more memory than the sum of
+its components. Our approach improves on Kiselov's by natively
+polarizing streams. The polarity of a stream corresponds to its
+runtime behaviour (push or pull).  In our approach, if polarities do
+not match, the types will not match either. It is however be possible
+to adjust the types by adding explicit buffering, in a natural manner:
 
 \begin{spec} h = g . buffer . f \end{spec}
 
-Second, stream closing is reliable. Printing a file can be implemented
-as follows:
+On the second issue, we fare as well as iteratees: stream closing is
+reliable. Printing a file can be implemented as follows:
 
 > main = fileSrc "foo" `forward` stdoutSnk
 
 In particular, if an exception occurs on \var{stdout}, the input file
 will be properly closed anyway. (In the general case, stream
-processors will be run in-between reading and printing. )
+processors will be run in-between reading and printing.)
 
 The contributions of this paper are
 
@@ -161,10 +164,20 @@ outlined above, our library features two concrete novel aspects:
   2. Support for explicit buffering and control structures, while
     still respecting compositionality.
 
+\paragraph{Outline} The rest of the paper is structured as follows.
+In Sec. \ref{negations}, we recall the notions of continuations in presence of effects.
+In Sec. \ref{streams}, we present our design for streams, and justify it by appealing to linearity principles.
+In Sec. \ref{effect-free}, we give an API to program with streams, and analyse their algebraic structure.
+In Sec. \ref{effectful}, we show how to embed IO into streams.
+In Sec. \ref{async}, we discuss polarity mismatch.
+Related work and future work are discussed respectively in sections \ref{related-work} and \ref{future-work}.
+We conclude in Sec. \ref{conclusion}.
+
 
 
 Preliminary: negation and continuations
 =======================================
+\label{negations}
 
 In this section we recall the basics of continuation-based
 programming. Readers familiar with continuations only need to read
@@ -444,6 +457,7 @@ recursion pattern introduced above.
 
 Effect-Free Streams
 ===================
+\label{effect-free}
 
 The functions seen so far make no use of the fact that \var{Eff} can
 embed IO actions. In fact, a large number of useful functions over
@@ -912,6 +926,7 @@ the stream are closed.
 
 Effectful streams
 =================
+\label{effectful}
 
 So far, we have constructed only effect-free streams. That is, effects
 could be any monoid, and in particular the unit type.  In this
@@ -1026,6 +1041,7 @@ proof of concept implementation presented in this paper.
 
 Synchronicity and Asynchronicity
 ================================
+\label{async}
 
 One of the main benefits of streams as defined here is that the
 programming interface is (or appears to be) asynchronous, while the
@@ -1453,6 +1469,7 @@ The server can then be defined by composing the above two functions.
 
 Related Work
 ============
+\label{related}
 
 
 Polarities, data structures and control
@@ -1479,36 +1496,14 @@ intended, while being faithful to the theoretical foundations in
 logic, via the double-negation embedding.
 
 
-FeldSpar monadic streams
-------------------------
-
-Feldspar, a DSL for digital signal processing, has a notion of streams
-built on monads \citet{svenningsson15:monadic_streams}. In Haskell
-the stream type can be written as follows:
-
-\begin{spec}
-type Stream a = IO (IO a)
-\end{spec}
-
-Intuitively the outer monad can be understood as performing
-initialization which creates the inner monadic computation. The inner
-computation is called iteratively to produce the elements of the
-stream.
-
-Compared to the representation in the present paper, the monadic
-streams only has one form of stream, corresponding to a source. Also,
-there is no support for timely release of resources, such things need
-to be dealt with outside of the stream framework. Additionally, even
-conceptually effect-free streams rely on running IO effects.
-
 Iteratees
 ---------
 
 We consider that the state of the art in Haskell stream processing is
 embodied by Kiselyov's iteratees \citeyear{kiselyov_iteratees_2012}.
-Several production-strength libraries have been built using the
-concept of iteratees, including *pipes* and *conduits*.  The type for
-iteratees can be given the following definitions:
+
+
+The type for iteratees can be given the following definitions:
 
 > data I s m a = Done a | GetC (Maybe s -> m (I s m a))
 
@@ -1521,19 +1516,24 @@ iteratee users may access the continuation in the \var{GetC}
 constructor. Therefore, users can in principle discard and duplicate
 continuations, thereby potentially duplicating or ignoring effects.
 This makes iteratees subject to the same linearity constraint as we
-have: a first advantage of our approach is the formulation and emphasis on
-the linearity constraint.
+have: a first advantage of our approach is the formulation and
+emphasis on the linearity constraint. It appears that variants of
+iteratees (including the *pipes* library) make
+the representation abstract, but at the cost of a complex interface
+for programming them. By stating the linearity requirement no abstract
+API is necessary to guarantee safety.
 
 A second advantage of our library is that effects are not required to
 be monads. Indeed, the use of continuations already provide the
-necessary structure to combine computations (indeed, double negation
-is a monad). We believe that having a single way to bind intermediate
-results (continuations vs. both continuations and monads) is a
-simplification in design which may make our library more approachable.
+necessary structure to combine computations (recall in particualar
+that double negation is already a monad). We believe that having a
+single way to bind intermediate results (continuations vs. both
+continuations and monads) is a simplification in design, which may make
+our library more approachable.
 
 The presence of source and sinks also clarifies how to build complex
-types. Indeed, iteratee-based libraries heavily use the following
-types:
+types programs from basic blocks. Indeed, iteratee-based libraries
+make heavy use of the following types:
 
 > type Enumerator el m a = I el m a -> m (I el m a)
 > type Enumeratee elo eli m a =
@@ -1542,7 +1542,8 @@ types:
 As far as we understand these types make up for the lack of explicit
 sources by putting iteratees (sinks) on the left-hand-side of an
 arrow. Enumerators are advantageously replaced by sources, and
-enumeratees by simple functions from source to source.
+enumeratees by simple functions from source to source (or sink to
+sink).
 
 
 A third advantage of our approach is that the need for buffering (or
@@ -1565,8 +1566,42 @@ type Transducer m1 m2 e1 e2 =
   Producer m1 e1 -> Producer m2 e2
 \end{spec}
 
-Yet, linearity is still not emphasized, the use of a monad rather
+Yet, linearity is still not mentioned, the use of a monad rather
 than monoid persists, and mismatching polarities are not discussed.
+
+Several production-strength libraries have been built upon the concept
+of iteratees, including *pipes* \citep{gonzalez_pipes_2015},
+*conduits* \citep{snoyman_conduit_2015} and *machines*
+\citep{kmett_machines_2015}.  While we focus our comparision with
+iteratees, most of our analysis carries to the production libraries.
+There is additionally a large body of non peer-reviewed literature
+discussing and analysing on either iteratees or its variants. The
+proliferation of libraries for IO in Haskell indicates that a unifying
+foundation for them is needed, and we hope that the present paper
+provides a basis for such a foundation.
+
+
+FeldSpar monadic streams
+------------------------
+
+Feldspar, a DSL for digital signal processing, has a notion of streams
+built on monads \citet{svenningsson15:monadic_streams}. In Haskell
+the stream type can be written as follows:
+
+\begin{spec}
+type Stream a = IO (IO a)
+\end{spec}
+
+Intuitively the outer monad can be understood as performing
+initialization which creates the inner monadic computation. The inner
+computation is called iteratively to produce the elements of the
+stream.
+
+Compared to the representation in the present paper, the monadic
+streams only has one form of stream, corresponding to a source. Also,
+there is no support for timely release of resources, such things need
+to be dealt with outside of the stream framework. Additionally, even
+conceptually effect-free streams rely on running IO effects.
 
 Session Types
 -------------
@@ -1591,6 +1626,7 @@ class), which does not require abiding to linearity.
 
 Future Work
 ===========
+\label{future}
 
 As we see it, a natural next step for the present work is to show that
 intermediate sources and sinks can be deforested. As it stands, we
@@ -1622,6 +1658,7 @@ add simple linear type support in research-grade Haskell compilers.
 
 Conclusion
 ==========
+\label{conclusion}
 
 We have cast an new light on the current state of coroutine-based
 computation in Haskell. We have done so by drawing inspiration from
@@ -1743,7 +1780,6 @@ source is empty.
 > toListSnk k Nil = k []
 > toListSnk k (Cons x xs) = toList xs $ \xs' -> k (x:xs')
 
-\newpage
 
 Proof of associativity of append for sinks
 ==========================================
