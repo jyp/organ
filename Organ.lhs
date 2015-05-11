@@ -23,7 +23,7 @@ Possible titles:
 In this paper, we present a novel stream-programming library for
 Haskell.  As other coroutine-based stream libraries, our library
 allows synchronous execution, which implies that effects are run in
-lockstep and no bufferring occurs.
+lockstep and no buffering occurs.
 
 A novelty of our implementation is that it allows to locally introduce
 buffering or re-scheduling of effects. The buffering requirements (or
@@ -51,19 +51,19 @@ Streams, Continuations, Linear Types
 Introduction
 ============
 
-As \citet{hughes_functional_1989} famously noted, the stength of
+As \citet{hughes_functional_1989} famously noted, the strength of
 functional programming languages lie in the composition mechanisms
 that they provide. That is, simple components can be built and
 understood in isolation; one does not need to worry about interference
 effects when composing them. In particular, lazy evaluation affords to
-contruct complex programs by pipelining simple list transformation
+construct complex programs by pipelining simple list transformation
 functions. Indeed, while strict evaluation forces to fully reify each
 intermediate result between each computational step, lazy
 evaluation allows to run all the computations concurrently, often
 without ever allocating more that a single intermediate result at a time.
 
 Unfortunately, lazy evaluation suffers from two drawbacks.  First, it
-has unpredictable memory behaviour. Consider the following function
+has unpredictable memory behavior. Consider the following function
 composition:
 
 \begin{spec}
@@ -72,14 +72,14 @@ g :: [b] -> [c]
 h = g . f
 \end{spec}
 
-One hopes that, at runtime, the intermediate list ($[b]$) list
-will only be allocated elementwise, as outlined above. Unfortunately,
-this desired behaviour does not necessarily happen. Indeed, a
+One hopes that, at run-time, the intermediate list ($[b]$) list
+will only be allocated element-wise, as outlined above. Unfortunately,
+this desired behavior does not necessarily happen. Indeed, a
 necessary condition is that the production pattern of $f$ matches the
 consumption pattern of $g$; otherwise buffering occurs. In practice,
 this means that a seemingly innocuous change in either of the function
-definitions may drastically change the memory behaviour of the
-composition, without warning. If one cares about memory behaviour,
+definitions may drastically change the memory behavior of the
+composition, without warning. If one cares about memory behavior,
 this means that the compositionality principle touted by Hughes breaks
 down.
 
@@ -90,7 +90,7 @@ file lazily, one is exposed to losing referential transparency (as
 expect\footnote{This expectation is expressed in a
 Stack Overflow question, accessible at this URL:
 http://stackoverflow.com/questions/296792/haskell-io-and-closing-files
-} that both following programs have the same behaviour:
+} that both following programs have the same behavior:
 
 \begin{spec}
 main = do  inFile <- openFile "foo" ReadMode
@@ -113,7 +113,7 @@ list. In the first program, printing the contents force reading the
 file. One may argue that \var{hClose} should not be called in the
 first place. But then, closing the handle happens only when the
 \var{contents} list can be garbage collected (in full), and relying on
-garabage collection for cleaning resources is brittle; furthermore
+garbage collection for cleaning resources is brittle; furthermore
 this effect compounds badly with the first issue discussed above.  If
 one wants to use lazy effectful computations, again, the
 compositionality principle is lost.
@@ -122,13 +122,13 @@ In this paper, we propose to tackle both of these problems, by means
 of a new representation for streams of data, and a convention on how
 to use streams. The convention to respect is *linearity*. In fact, the
 ideas presented in this paper are heavily inspired by study of
-Girards' linear logic \cite{girard_linear_1987}, and one way to read
+Girard's linear logic \cite{girard_linear_1987}, and one way to read
 this paper is as an advocacy for linear types support in Haskell.
 
 How does our approach fare on the issues identified above? First,
 using our solution, the composition of two stream processors is
 guaranteed not to allocate more memory than the sum of its components.
-If the stream behaviours do not match, the types will not match
+If the stream behaviors do not match, the types will not match
 either. It is however be possible to adjust the types by adding
 explicit buffering, in a natural manner:
 
@@ -147,7 +147,7 @@ The contributions of this paper are
 
 * The formulation of principles for compositional resource-aware
 programming in Haskell (resources include memory and files). The
-principles are linearity, duality, and polarisation. While borrowed
+principles are linearity, duality, and polarization. While borrowed
 from linear logic, as far as we know they have not been applied to
 Haskell programming before.
 
@@ -192,13 +192,13 @@ A shortcut for double negations is also convenient.
 
 > type NN a = N (N a)
 
-The basic idea (imported from classical logics) pervading this paper
+The basic idea (imported from classical logic) pervading this paper
 is that producing a result of type α is equivalent to consuming an
 argument of type $N α$. Dually, consuming an argument of type α is
 equivalent to producing a result of type $N α$. In this paper we call
 these equivalences the duality principle.
 
-In classical logics, negation is involutive; that is:
+In classical logic, negation is involutive; that is:
 $\var{NN}\,a = a$
 However, because we work with an intuitionistic language (Haskell), we
 do not have this equality.  We can come close enough though.
@@ -219,13 +219,13 @@ The above two functions are the \var{return} and \var{join} of the
 double negation monad\footnote{for \var{join}, substitute $N\,a$ for
 $a$}. However, we will not be using this monadic structure anywhere in
 the following. Indeed, single negations play a central role in our
-approach, and the monadic struture is a mere diversion.
+approach, and the monadic structure is a mere diversion.
 
 
 Streams
 =======
 
-Our guiding design principle is duality. This principle is refected in
+Our guiding design principle is duality. This principle is reflected in
 the design of the streaming library: we will not only have a type for
 sources of data but also a type for sinks. For example, a simple
 stream processor reading from a single source and writing to a single
@@ -295,7 +295,7 @@ again.
 will be in charged of consuming it).
 
 3. A type variable α can be instantiated to an effectful type only if
-it occurs in an effecful type. (For example it is ok to construct
+it occurs in an effectful type. (For example it is OK to construct
 $\var{Src}\,(\var{Src}\,a)$, because \var{Src α} is already effectful).
 
 
@@ -508,7 +508,7 @@ structure of \var{Eff} in this case.
 Algebraic structure
 -------------------
 
-Sources and sinks are instances of several common algrebraic
+Sources and sinks are instances of several common algebraic
 structures, yielding a rich API to program using them.
 
 \paragraph{Monoid} Source and sinks form a monoid under concatenation:
@@ -525,7 +525,7 @@ We have already encountered the units (\var{empty} and \var{plug});
 the appending operations are defined below.  Intuitively,
 \var{appendSrc} first gives control to the first source until it runs
 out of elements and then turns control over to the second source. This
-behaviour is implemented in the helper function \var{forwardThenSnk}.
+behavior is implemented in the helper function \var{forwardThenSnk}.
 
 > appendSrc :: Src a -> Src a -> Src a
 > appendSrc s1 s2 Full = s1 Full <> s2 Full
@@ -537,7 +537,7 @@ behaviour is implemented in the helper function \var{forwardThenSnk}.
 > forwardThenSnk snk src (Cons a s)
 >   = snk (Cons a (appendSrc s src))
 
-Sinks can be appended is a similar fasion.
+Sinks can be appended is a similar fashion.
 
 > appendSnk :: Snk a -> Snk a -> Snk a
 > appendSnk s1 s2 Nil = s1 Nil <> s2 Nil
@@ -643,7 +643,7 @@ is the concatenation of sources:
 
 > concatSrcSrc :: Src (Src a) -> Src a
 
-Concatentation is defined using the two auxiliary functions
+Concatenation is defined using the two auxiliary functions
 \var{concatSnkSrc} and \var{concatAux}. The function
 \var{concatSnkSrc} takes a sink and produces a new sink which can
 take a sequence of sources (TODO: Josef: Jp does not understand this sentence). All of these sources are to be fed into the
@@ -837,7 +837,7 @@ source of structured data, given a parser.  This conversion is useful
 for example to turn an XML file, provided as a stream of characters
 into a stream of (opening and closing) tags.
 
-We beging by defining a pure parsing structure, modeled after the
+We begin by defining a pure parsing structure, modeled after the
 parallel parsing processes of \citet{claessen_parallel_2004}.  The
 parser is continuation based, but the effects being accumulated are
 parsing processes, defined as follows. The \var{Sym} constructor parses \var{Just}
@@ -855,7 +855,7 @@ A parser producing $a$ the double negation of $a$:
 
 > newtype Parser s a = P (forall res. (a -> P s res) -> P s res)
 
-The monading interface can then be built using shift and unshift:
+The monadic interface can then be built using shift and unshift:
 
 > instance Monad (Parser s) where
 >   return x  = P $ \fut -> fut x
@@ -966,7 +966,7 @@ follows:
 > copyFile source target = forward  (fileSrc source)
 >                                   (fileSnk target)
 
-It should be emphasised at this point that when running \var{copyFile} reading and writing will be
+It should be emphasized at this point that when running \var{copyFile} reading and writing will be
 interleaved: in order to produce the next line in the source (in this
 case by reading from the file), the current line must first be
 consumed in the sink (in this case by writing it to disk).  The stream
@@ -995,7 +995,7 @@ illustrative purposes, their production-strength versions should
 handle exceptions. Doing so is straightforward: as shown above, our
 sinks and sources readily support early closing of the stream.
 
-The following code fragment shows how to hande an exception when
+The following code fragment shows how to handle an exception when
 reading a line in a file source.
 
 > hFileSrcSafe :: Handle -> Src String
@@ -1029,16 +1029,16 @@ Synchronicity and Asynchronicity
 
 One of the main benefits of streams as defined here is that the
 programming interface is (or appears to be) asynchronous, while the
-runtime behaviour is synchronous.
+run-time behavior is synchronous.
 That is, one can build a data source regardless of how the data is be consumed,
 or dually one can build a sink regardless of how the data is produced;
-but, despite the independency of definitions, all the code can (and
+but, despite the independence of definitions, all the code can (and
 is) executed synchronously: composing a source and a sink require no
 concurrency (nor any external control structure).
 
 As discussed above, a consequence of synchronicity is that the
-programer cannot be implicity buffering data when connecting a source
-to a sink: every production must be matched by a consuption (and vice
+programmer cannot be implicitly buffering data when connecting a source
+to a sink: every production must be matched by a consumption (and vice
 versa).  In sum, synchronicity restricts the kind of operations one
 can construct, in exchange for two guarantees:
 
@@ -1052,7 +1052,7 @@ rest of the section we show by example how the restriction plays out.
 Example: demultiplexing
 -----------------------
 
-One operation supported by synchronous behaviour is the demultiplexing
+One operation supported by synchronous behavior is the demultiplexing
 of a source, by connecting it to two sinks.
 
 > dmux' :: Src (Either a b) -> Snk a -> Snk b -> Eff
@@ -1098,10 +1098,10 @@ turns.
 
 In order to make any progress, we can let the choice of which source
 to pick fall on the consumer of the stream. The type that we need for
-output data in this case is a so-called additive conjuction. It is
+output data in this case is a so-called additive conjunction. It is
 the dual of the \var{Either} type: there is a choice, but this choice
 falls on the consumer rather than the producer of the data. Additive
-conjuction, written &, can be encoded by sandwiching \var{Either}
+conjunction, written &, can be encoded by sandwiching \var{Either}
 between two inversion of the control flow, thus switching the party
 who makes the choice:
 
@@ -1146,7 +1146,7 @@ a$ is a (different kind of) source of $a$. We define:
 > type CoSrc a = Snk (N a)
 > type CoSnk a = Src (N a)
 
-Implementing multipexing on co-sources is then straightforward, by
+Implementing multiplexing on co-sources is then straightforward, by
 leveraging \var{dmux'}:
 
 > mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
@@ -1198,7 +1198,7 @@ decide the ordering of effects run a co-sink connected to it. That is,
 the lines (1) and (2) have no data dependency. Therefore they may be
 run in any order. (Blindly doing so is a bad idea though, as the
 \var{Full} action on the sink will be run before all other actions.)
-We will see in the next section how this situation generalises.
+We will see in the next section how this situation generalizes.
 
 The second example is a infinite co-sink that sends data to a file.
 
@@ -1228,7 +1228,7 @@ restricts the kind of programs one can write. In this section, we
 provide primitives which allow forms of asynchronous programming within
 our framework.
 The main benefit of sticking to our framework in this case is that
-asynchronous behaviour is cornered to the explicit usages of these
+asynchronous behavior is cornered to the explicit usages of these
 primitives. That is, the benefits of synchronous programming still
 hold locally.
 
@@ -1258,7 +1258,7 @@ Implementing the conversions is then straightforward:
 
 What are possible scheduling strategies? The simplest, and most
 natural one is sequential execution: looping through both sources and
-match the consumptions/productions elementwise, as follows.
+match the consumptions/productions element-wise, as follows.
 
 > sequentially :: Schedule a
 > sequentially Nil (Cons _ xs) = xs Full
@@ -1379,7 +1379,7 @@ In sum, we can classify streams according to polarity:
 
 We then have three situations when composing stream processors:
 
-1. Matching polarities. In this case behaviour is synchronous; no
+1. Matching polarities. In this case behavior is synchronous; no
 concurrency appears.
 
 2. Two positives. In this case an explicit loop must process the
@@ -1396,20 +1396,20 @@ types when one can, and positive ones when one must. Conversely, one
 should produce positive types when one can, and negative ones when one
 must.
 
-App: idealised echo server
+App: idealized echo server
 ---------------------
 
-We finish exposition of asynchronous behaviour with a small program
+We finish exposition of asynchronous behavior with a small program
 sketching the skeleton of a client-server application. This is a small
 server with two clients, which echoes the requests of each client to
 both of them.
 
 The server communicates with each client via two streams, one for
 inbound messages, one for outbound ones. We want each client to be
-able to send and recieve messages in the order that they like. That
+able to send and receive messages in the order that they like. That
 is, from their point of view, they are in control of the message
 processing order. Hence a client should have a co-sink for sending
-messages to the server, and a source for recieving them.  On the
+messages to the server, and a source for receiving them.  On the
 server side, types are dualized and thus, a client is represented by a
 pair of a co-source and a sink:
 
@@ -1418,9 +1418,9 @@ pair of a co-source and a sink:
 For simplicity we implement a chat server handling exactly two
 clients.
 
-The first problem is to mulitiplex the inputs of the clients. In the
+The first problem is to multiplex the inputs of the clients. In the
 server, we do not actually want any client to be controlling the
-processing order. Hence we have to mulitiplex the messages in real time,
+processing order. Hence we have to multiplex the messages in real time,
 using a channel (note the similarity with \var{chanBuffer}):
 
 > bufferedDmux :: CoSrc a -> CoSrc a -> Src a
@@ -1473,13 +1473,13 @@ summary of Jacksons' insight).
 
 Our contribution is to bring this idea to stream programming in
 Haskell. (While duality was used for Haskell array programming, it has
-not been taken advantage for stream programming.) We belive that our
+not been taken advantage for stream programming.) We believe that our
 implementation brings together the practical applications that Jackson
 intended, while being faithful to the theoretical foundations in
 logic, via the double-negation embedding.
 
 
-FeldSpar modadic streams
+FeldSpar monadic streams
 ------------------------
 
 Feldspar, a DSL for digital signal processing, has a notion of streams
@@ -1541,7 +1541,7 @@ types:
 
 As far as we understand these types make up for the lack of explicit
 sources by putting iteratees (sinks) on the left-hand-side of an
-arrow. Enumerators are advantagously replaced by sources, and
+arrow. Enumerators are advantageously replaced by sources, and
 enumeratees by simple functions from source to source.
 
 
@@ -1555,7 +1555,7 @@ In more recent work \citet{kiselyov_lazy_2012} present a
 continuation-based pretty printer, which fosters a more stylized used
 of continuations, closer to what we advocate here. Producers and
 consumers (sources and sinks) are defined more simply, using types
-which correpond more directly to negations:
+which correspond more directly to negations:
 
 \begin{spec}
 type GenT e m = ReaderT (e -> m ()) m
@@ -1565,7 +1565,7 @@ type Transducer m1 m2 e1 e2 =
   Producer m1 e1 -> Producer m2 e2
 \end{spec}
 
-Yet, linearity is still not emphasised, the use of a monad rather
+Yet, linearity is still not emphasized, the use of a monad rather
 than monoid persists, and mismatching polarities are not discussed.
 
 Session Types
@@ -1597,8 +1597,8 @@ intermediate sources and sinks can be deforested. As it stands, we
 believe that a standard approach
 \cite{gill_short_1993,svenningsson_shortcut_2002,coutts_stream_2007}
 should work: 1. encode sources (and sinks) as non-recursive data types
-2. show that standard evaluation rules remove the intemediate
-occurences of the encoded types. However, this work has not been
+2. show that standard evaluation rules remove the intermediate
+occurrences of the encoded types. However, this work has not been
 carried out yet.
 
 The duality principle exposed here as already been taken advantage of
@@ -1870,5 +1870,40 @@ NOTE: commutative monads is SPJ Open Challenge #2 in his 2009 Talk "Wearing the 
 >    shiftSrc xs' $ \sna ->
 >    reverted sa sna)
 >   x' x
+
+
+--  LocalWords:  forkIO readChan writeChan newChan Applicative IORef
+--  LocalWords:  coroutine Coroutines hughes compositionality inFile
+--  LocalWords:  effectful kiselyov openFile ReadMode hGetContents NN
+--  LocalWords:  putStr hClose Girard fileSrc stdoutSnk stdout Src
+--  LocalWords:  compositional mempty mappend Dually involutive Snk
+--  LocalWords:  unshift monadic versa unzipSrc textit iff rw eof pre
+--  LocalWords:  consumptions onSource onSink unshiftSnk unshiftSrc
+--  LocalWords:  shiftSnk shiftSrc kk flipSnk flipSrc mapSrc mapSnk
+--  LocalWords:  snk formers dnintro dndel duals takeSrc takeSnk th
+--  LocalWords:  monoidal appendSrc appendSnk forwardThenSnk src IH
+--  LocalWords:  forwardThenSrc infixr infixl equalities morphism ss
+--  LocalWords:  contravariant concatSrcSrc concatSnkSrc concatAux mx
+--  LocalWords:  TODO ssrc monads comonads comonad counit contramap
+--  LocalWords:  sinkToSnk superclasses josef subclasses zipWith Sym
+--  LocalWords:  zipSrc unzipSnk zipSnk scanl scanSrc scanSnk foldl
+--  LocalWords:  foldSrc foldSnk dropSrc dropSnk fromList toList ret
+--  LocalWords:  linesSrc unlinesSnk untilSnk interleaveSnk filterSrc
+--  LocalWords:  filterSnk unchunk chunkSnk claessen newtype forall
+--  LocalWords:  longestResultSnk mres hFileSnk hPutStrLn fileSnk txt
+--  LocalWords:  FilePath WriteMode hFileSrc hIsEOF hGetLine copyFile
+--  LocalWords:  stdin hFileSrcSafe IOException Asynchronicity dually
+--  LocalWords:  demultiplexing dmux tb sab mux sa sb De ka resta kb
+--  LocalWords:  restb CoSrc CoSnk mapCoSrc mapCoSnk coToList strat
+--  LocalWords:  coFileSrc coFileSink srcToCoSrc coSnkToSnk sna tmp
+--  LocalWords:  distributable fileBuffer chanCoSnk chanSrc varCoSnk
+--  LocalWords:  chanBuffer writeIORef varSrc readIORef varBuffer kay
+--  LocalWords:  newIORef flipBuffer dualized bufferedDmux laurent el
+--  LocalWords:  collapseSnk zeilberger jackson Jacksons FeldSpar DSL
+--  LocalWords:  svenningsson iteratively Iteratees Kiselyov's GetC
+--  LocalWords:  iteratees citeyear iteratee Enumeratee elo eli GenT
+--  LocalWords:  enumeratees ReaderT caires Pucella Tov coutts tov js
+--  LocalWords:  acks url pandoc lhs bibliographystyle abbrvnat bs nb
+--  LocalWords:  PaperTools lastSrc foldr
 
 -->
