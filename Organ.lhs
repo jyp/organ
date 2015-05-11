@@ -706,7 +706,7 @@ argument, but has been given none In the instance declaration for
 
 If sinks are not comonads, are there some other structures that they
 implement? The package contravariant on hackage gives two classes;
-\var{Divisible} and \var{Decidable}, which are superclasses (TODO: subclasses?) of
+\var{Divisible} and \var{Decidable}, which are superclasses (TODO: josef: subclasses?) of
 \var{Contravariant}, a class for contravariant functors. They are
 defined as follows:
 
@@ -844,7 +844,7 @@ parsing processes, defined as follows. The \var{Sym} constructor parses \var{Jus
 a symbol, or \var{Nothing} if the end of stream is reached. A process may
 also \var{Fail} or return a \var{Result} (and continue).
 
-TODO: continuing after result is not necessary for this
+TODO: discuss: continuing after result is not necessary for this
 application. Delete?
 
 > data P s res  =  Sym (Maybe s -> P s res)
@@ -1602,12 +1602,12 @@ occurences of the encoded types. However, this work has not been
 carried out yet.
 
 The duality principle exposed here as already been taken advantage of
-to support fusible array types (TODO cite). The present paper has
-shown how to support effectful stream computations. One would
-naturally think that the same principle can be applied to other
-lazily-evaluated data structures, such as the game trees discussed by
-\citet{hughes_functional_1989}: as far as we know this remains to be
-investigated.
+to support fusible array types \cite{bernardy_composable_2014}. The
+present paper has shown how to support effectful stream
+computations. One would naturally think that the same principle can be
+applied to other lazily-evaluated data structures, such as the game
+trees discussed by \citet{hughes_functional_1989}: as far as we know
+this remains to be investigated.
 
 Another line of development would be to implement language support for
 the linearity convention, directly in Haskell. There has been many
@@ -1623,16 +1623,13 @@ add simple linear type support in research-grade Haskell compilers.
 Conclusion
 ==========
 
-* In particular, we show that mismatch in duality correspond to
-buffers and control structures, depending on the kind of mismatch.
-
-
-* Cast an new light on coroutine-based io by drawing inspiration from
-classical linear logic. Emphasis on polarity and duality.
-
-
-* A re-interpretation of coroutine-based effectful computing, based on
-a computational interpretation of linear logic, and
+We have cast an new light on the current state of coroutine-based
+computation in Haskell. We have done so by drawing inspiration from
+classical linear logic. We have shown that the concepts of duality and
+polarity provide design principles to structure continuation-based
+code. In particular, we have shown that mismatches in polarity
+correspond to buffers and control structures, depending on the kind of
+mismatch.
 
 
 \acks
