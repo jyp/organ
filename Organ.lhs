@@ -901,7 +901,7 @@ encountered, it is fed to the sink. If the parser fails, both ends of
 the stream are closed.
 
 > parse :: forall s a. Parser s a -> Src s -> Src a
-> parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x Fail
+> parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x
 >  where
 >   scan :: P s a -> Snk a -> Snk s
 >   scan (Result res  )  ret        xs     = ret
