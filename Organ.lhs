@@ -127,25 +127,54 @@ Kiselyov's *iteratees* (\citeyear{kiselyov_iteratees_2012}) already
 solves the issues described above, our grounding in linear logic
 allows us to support more stream programs, as we discuss below.
 
-How does our approach fare on the issues identified above? First, as
-Kiselyov's, using our solution the composition of two stream
-processors is guaranteed not to allocate more memory than the sum of
-its components. Our approach improves on Kiselov's by natively
-polarizing streams. The polarity of a stream corresponds to its
-runtime behavior (push or pull).  In our approach, if polarities do
-not match, the types will not match either. It is however be possible
-to adjust the types by adding explicit buffering, in a natural manner:
+How does our approach fare on the issues identified above? It shares
+the good properties of Kiselyov's solutions: 1. the composition of two
+stream processors is guaranteed not to allocate more memory than the
+sum of its components and 2. closing of resources is reliable.  Our
+approach improves on Kiselov's by natively capturing the production
+(or consumption) pattern of streams in their types. We have two kinds
+of streams: pull streams and push streams.
 
-\begin{spec} h = g . buffer . f \end{spec}
+For example, the contents of a file can be pulled at will,
+therefore it can be given pull type:
+\begin{spec} fileSrc :: Src String \end{spec}
 
-On the second issue, we fare as well as iteratees: stream closing is
-reliable. Printing a file can be implemented as follows:
+However, sending data to a output may have to wait for a (usually
+abtract) terminal to be ready; hence it has a push type:
+\begin{spec} stdoutSnk :: Sink String \end{spec}
+
+Push and pull types can be connected to sinks using the \var{fwd}
+function.
+\begin{spec} fwd :: Src a -> Sink a -> IO () \end{spec}
+
+Printing a file can thus implemented as follows:
 
 > main = fileSrc "foo" `fwd` stdoutSnk
 
-In particular, if an exception occurs on \var{stdout}, the input file
-will be properly closed anyway. (In the general case, stream
-processors will be run in-between reading and printing.)
+(Often, a stream processor will be inserted in-between reading and
+printing.)
+
+Some data sources will be of the push kind; for example, if the
+standard input expects its data to be processed immediately it should
+be given that polarity.
+\begin{spec} stdinSrc :: CoSource String \end{spec}
+
+In our approach, if polarities do not match, the types will not match
+either. It is however still possible to compose functions! Assume a
+function f producing a push stream and function g consuming a pull
+stream.
+
+\begin{spec}
+f :: A -> CoSrc b
+g :: Src b -> C
+\end{spec}
+
+The composition can then be programmed by adding an explicit
+\var{buffer}, which will ensure that \var{f} never blocks on
+unconsumed output:
+
+\begin{spec} h = g . buffer . f \end{spec}
+
 
 The contributions of this paper are
 
@@ -319,7 +348,7 @@ $\var{Src}\,(\var{Src}\,a)$, because $\var{Src}\, α$ is already effectful).
 In this paper, the linearity convention is enforced by manual
 inspection. Manual inspection is unreliable, but weather the linearity
 convention is respected can be algorithmically decided. (See
-sec. \ref{rw-linearity})
+sec. \ref{future})
 
 
 Basics
@@ -374,16 +403,16 @@ inherently continuation-heavy: negations must be explicitly added in
 many places. This style is somewhat inconvenient; therefore, we will
 use instead pre-negated versions of sources and sink:
 
-> type Src a = N (Sink a)
-> type Snk a = N (Source a)
+> type Src   a = N  (Sink a)
+> type Snk   a = N  (Source a)
 
 These definitions have the added advantage to perfect the duality
 between sources and sinks, while not restricting the programs one can
 write.
 Indeed, one can access the underlying structure as follows:
 
-> onSource :: (Src a -> t) -> Source a -> t
-> onSink :: (Snk a -> t) -> Sink a -> t
+> onSource   :: (Src  a -> t) -> Source   a -> t
+> onSink     :: (Snk  a -> t) -> Sink     a -> t
 
 > onSource f s = f (\t -> forward s t)
 > onSink   f t = f (\s -> forward s t)
