@@ -662,8 +662,7 @@ is the concatenation of sources:
 
 Concatenation is defined using the two auxiliary functions
 \var{concatSnkSrc} and \var{concatAux}. The function
-\var{concatSnkSrc} takes a sink and produces a new sink which can
-take a sequence of sources (TODO: Josef: Jp does not understand this sentence). All of these sources are to be fed into the
+\var{concatSnkSrc} transforms a sink such that it no longer just consumes elements, but sequences of elements in the form of sources. All of these sources are to be fed into the
 sink, one after the other. Appending all the sources together happens
 in \var{concatAux}.
 
