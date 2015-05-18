@@ -133,17 +133,18 @@ stream processors is guaranteed not to allocate more memory than the
 sum of its components and 2. closing of resources is reliable.  Our
 approach improves on Kiselov's by natively capturing the production
 (or consumption) pattern of streams in their types. We have two kinds
-of streams: pull streams and push streams.
+of streams: pull streams (annotated with +) and push streams
+(annotated with -).
 
-For example, the contents of a file can be pulled at will,
-therefore it can be given pull type:
+For example, the contents of a file can be pulled at will;
+therefore it is pull source of data:
 \begin{spec} fileSrc :: Src String \end{spec}
 
 However, sending data to a output may have to wait for a (usually
-abtract) terminal to be ready; hence it has a push type:
-\begin{spec} stdoutSnk :: Sink String \end{spec}
+abtract) terminal to be ready; hence it is a push sink of data:
+\begin{spec} stdoutSnk :: Snk String \end{spec}
 
-Push and pull types can be connected to sinks using the \var{fwd}
+Push and pull streams can be connected to sinks using the \var{fwd}
 function.
 \begin{spec} fwd :: Src a -> Sink a -> IO () \end{spec}
 
@@ -157,7 +158,7 @@ printing.)
 Some data sources will be of the push kind; for example, if the
 standard input expects its data to be processed immediately it should
 be given that polarity.
-\begin{spec} stdinSrc :: CoSource String \end{spec}
+\begin{spec} stdinSrc :: CoSrc String \end{spec}
 
 In our approach, if polarities do not match, the types will not match
 either. It is however still possible to compose functions! Assume a
@@ -170,8 +171,8 @@ g :: Src b -> C
 \end{spec}
 
 The composition can then be programmed by adding an explicit
-\var{buffer}, which will ensure that \var{f} never blocks on
-unconsumed output:
+\var{buffer}, which ensure that \var{f} never blocks on unconsumed
+output (at the cost of potentially unbounded memory allocation):
 
 \begin{spec} h = g . buffer . f \end{spec}
 
@@ -414,8 +415,8 @@ Indeed, one can access the underlying structure as follows:
 > onSource   :: (Src  a -> t) -> Source   a -> t
 > onSink     :: (Snk  a -> t) -> Sink     a -> t
 
-> onSource f s = f (\t -> forward s t)
-> onSink   f t = f (\s -> forward s t)
+> onSource  f   s = f   (\t -> forward s t)
+> onSink    f   t = f   (\s -> forward s t)
 
 
 And, while a negated \var{Sink} cannot be converted to a
