@@ -138,14 +138,26 @@ of streams: pull streams (annotated with +) and push streams
 
 For example, the contents of a file can be pulled at will;
 therefore it is a pull-source of data:
-\begin{spec} fileSrc :: Src String \end{spec}
+\begin{spec} fileSrc :: FilePath -> Src String \end{spec}
 
-Sending data to a output may have to wait for a (usually
-abtract) terminal to be ready; hence it is a push-sink of data:
+Some data sources will be of the push kind; for example, if the
+standard input terminal expects its data to be processed immediately
+it should be given that polarity:
+
+\begin{spec} stdinSrc :: CoSrc String \end{spec}
+
+Besides data sources, we have also data sinks. A terminal may also
+function as a data sink. As above, sending data may have
+to wait for a terminal to be ready; hence it is a
+push-sink of data:
+
 \begin{spec} stdoutSnk :: Snk String \end{spec}
 
-Push and pull streams can be connected to sinks using the \var{fwd}
-function.
+Streams can be connected directly iff
+* polarities are opposite
+* one is a data source and the other a data sink
+
+We have for example the following function:
 \begin{spec} fwd :: Src a -> Snk a -> IO () \end{spec}
 
 Printing a file can thus implemented as follows:
@@ -155,23 +167,18 @@ Printing a file can thus implemented as follows:
 (Often, a stream processor will be inserted in-between reading and
 printing.)
 
-Some data sources will be of the push kind; for example, if the
-standard input expects its data to be processed immediately it should
-be given that polarity.
-\begin{spec} stdinSrc :: CoSrc String \end{spec}
-
 In our approach, if polarities do not match, the types will not match
 either. It is however still possible to compose functions! Assume a
-function f producing a push stream and function g consuming a pull
-stream.
+function \var{f} producing a push stream and function \var{g}
+consuming a pull stream.
 
 \begin{spec}
 f :: A -> CoSrc b
 g :: Src b -> C
 \end{spec}
 
-The composition can then be programmed by adding an explicit
-\var{buffer}, which ensure that \var{f} never blocks on unconsumed
+The composition can then be programmed by inserting an explicit
+\var{buffer}, which ensures that \var{f} never blocks on unconsumed
 output (at the cost of potentially unbounded memory allocation):
 
 \begin{spec} h = g . buffer . f \end{spec}
