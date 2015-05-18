@@ -1463,7 +1463,7 @@ Polarities, data structures and control
 One of keys ideas formalized in this paper is to classify streams by
 polarity. The negative polarity (Sinks, CoSrc) controls the execution
 thread, whereas the positive one (Sources, Co-sinks) provide
-data. This idea has recently been taken advantage of this idea to
+data. This idea has recently been taken advantage of to
 bring efficient array programming facilities to functional programming
 \citep{bernardy_composable_2015,ankner_edsl_2013}.  TODO: josef: other citations
 
