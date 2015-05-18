@@ -1465,7 +1465,7 @@ polarity. The negative polarity (Sinks, CoSrc) controls the execution
 thread, whereas the positive one (Sources, Co-sinks) provide
 data. This idea has recently been taken advantage of this idea to
 bring efficient array programming facilities to functional programming
-\citep{bernardy_composable_2015}.  TODO: josef: other citations
+\citep{bernardy_composable_2015,ankner_edsl_2013}.  TODO: josef: other citations
 
 This concept is central in the literature on Girard's linear logic
 \citep{laurent_etude_2002,zeilberger_logical_2009}. However, in the
@@ -1623,7 +1623,7 @@ occurrences of the encoded types. However, this work has not been
 carried out yet.
 
 The duality principle exposed here as already been taken advantage of
-to support fusible array types \cite{bernardy_composable_2015} (TODO: josef: perhaps your Haskell paper here?). The
+to support fusible array types \cite{bernardy_composable_2015,ankner_edsl_2013}. The
 present paper has shown how to support effectful stream
 computations. One would naturally think that the same principle can be
 applied to other lazily-evaluated data structures, such as the game
