@@ -72,7 +72,7 @@ g :: [b] -> [c]
 h = g . f
 \end{spec}
 
-One hopes that, at run-time, the intermediate list ($[b]$) list
+One hopes that, at run-time, the intermediate list ($[b]$)
 will only be allocated element-wise, as outlined above. Unfortunately,
 this desired behavior does not necessarily happen. Indeed, a
 necessary condition is that the production pattern of $f$ matches the
