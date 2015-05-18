@@ -5,6 +5,7 @@
 Possible titles:
 
 - A Linear approach to streaming
+- Push and Pull Streams
 
 > {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms, BangPatterns, TypeSynonymInstances, FlexibleInstances  #-}
 > module Organ where
