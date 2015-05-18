@@ -722,7 +722,7 @@ argument, but has been given none In the instance declaration for
 
 If sinks are not comonads, are there some other structures that they
 implement? The package contravariant on hackage gives two classes;
-\var{Divisible} and \var{Decidable}, which are superclasses (TODO: josef: subclasses?) of
+\var{Divisible} and \var{Decidable}, which are subclasses of
 \var{Contravariant}, a class for contravariant functors. They are
 defined as follows:
 
