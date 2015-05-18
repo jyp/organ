@@ -1649,7 +1649,6 @@ add simple linear type support in research-grade Haskell compilers.
 
 Conclusion
 ==========
-\label{conclusion}
 
 We have cast an new light on the current state of coroutine-based
 computation in Haskell. We have done so by drawing inspiration from
