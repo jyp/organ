@@ -137,16 +137,16 @@ of streams: pull streams (annotated with +) and push streams
 (annotated with -).
 
 For example, the contents of a file can be pulled at will;
-therefore it is pull source of data:
+therefore it is a pull-source of data:
 \begin{spec} fileSrc :: Src String \end{spec}
 
-However, sending data to a output may have to wait for a (usually
-abtract) terminal to be ready; hence it is a push sink of data:
+Sending data to a output may have to wait for a (usually
+abtract) terminal to be ready; hence it is a push-sink of data:
 \begin{spec} stdoutSnk :: Snk String \end{spec}
 
 Push and pull streams can be connected to sinks using the \var{fwd}
 function.
-\begin{spec} fwd :: Src a -> Sink a -> IO () \end{spec}
+\begin{spec} fwd :: Src a -> Snk a -> IO () \end{spec}
 
 Printing a file can thus implemented as follows:
 
