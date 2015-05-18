@@ -5,6 +5,7 @@
 Possible titles:
 
 - A Linear approach to streaming
+- Push and Pull Streams
 
 > {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms, BangPatterns, TypeSynonymInstances, FlexibleInstances  #-}
 > module Organ where
@@ -493,6 +494,10 @@ Dually, the full sink is simply
 > plug source' = forward source' Full
 
 
+ <!--
+
+  A bit ugly, and used nowhere.
+
 A non-full sink decides what to do depending on the availability of
 data. We could write the following:
 
@@ -501,6 +506,7 @@ data. We could write the following:
 
 However, calling \var{await} may break linearity, so we will instead use
 \var{match} in the following.
+-->
 
 Another useful function is the equivalent of \var{take} on lists.
 Given a source, we can create a new source which ignores all but its
