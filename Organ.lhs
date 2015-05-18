@@ -834,7 +834,7 @@ Equivalent of \var{foldl'} for sources, and the dual.
 > foldSrc' :: (b -> a -> b) -> b -> Src a -> NN b
 > foldSnk' :: (b -> a -> b) -> b -> N b -> Snk a
 
-Drop some elements from a sources, and the dual.
+Drop some elements from a source, and the dual.
 
 > dropSrc :: Int -> Src a -> Src a
 > dropSnk :: Int -> Snk a -> Snk a
@@ -893,7 +893,7 @@ parallel parsing processes of \citet{claessen_parallel_2004}.  The
 parser is continuation based, but the effects being accumulated are
 parsing processes, defined as follows. The \var{Sym} constructor parses \var{Just}
 a symbol, or \var{Nothing} if the end of stream is reached. A process may
-also \var{Fail} or return a \var{Result} (and continue).
+also \var{Fail} or return a \var{Result}.
 
 > data P s res  =  Sym (Maybe s -> P s res)
 >               |  Fail
@@ -1678,7 +1678,6 @@ add simple linear type support in research-grade Haskell compilers.
 
 Conclusion
 ==========
-\label{conclusion}
 
 We have cast an new light on the current state of coroutine-based
 computation in Haskell. We have done so by drawing inspiration from
