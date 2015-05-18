@@ -118,8 +118,8 @@ this effect compounds badly with the first issue discussed above.  If
 one wants to use lazy effectful computations, again, the
 compositionality principle is lost.
 
-In this paper, we propose to tackle both of these issues by mimicing
-the computational behaviour of Girard's linear logic
+In this paper, we propose to tackle both of these issues by mimicking
+the computational behavior of Girard's linear logic
 \cite{girard_linear_1987} in Haskell. In fact, one way to read this
 paper is as an advocacy for linear types support in Haskell. While
 Kiselyov's *iteratees* (\citeyear{kiselyov_iteratees_2012}) already
@@ -131,7 +131,7 @@ Kiselyov's, using our solution the composition of two stream
 processors is guaranteed not to allocate more memory than the sum of
 its components. Our approach improves on Kiselov's by natively
 polarizing streams. The polarity of a stream corresponds to its
-runtime behaviour (push or pull).  In our approach, if polarities do
+runtime behavior (push or pull).  In our approach, if polarities do
 not match, the types will not match either. It is however be possible
 to adjust the types by adding explicit buffering, in a natural manner:
 
@@ -167,7 +167,7 @@ outlined above, our library features two concrete novel aspects:
 \paragraph{Outline} The rest of the paper is structured as follows.
 In Sec. \ref{negations}, we recall the notions of continuations in presence of effects.
 In Sec. \ref{streams}, we present our design for streams, and justify it by appealing to linearity principles.
-In Sec. \ref{effect-free}, we give an API to program with streams, and analyse their algebraic structure.
+In Sec. \ref{effect-free}, we give an API to program with streams, and analyze their algebraic structure.
 In Sec. \ref{effectful}, we show how to embed IO into streams.
 In Sec. \ref{async}, we discuss polarity mismatch.
 Related work and future work are discussed respectively in sections \ref{related-work} and \ref{future-work}.
@@ -316,7 +316,7 @@ $\var{Src}\,(\var{Src}\,a)$, because $\var{Src}\, α$ is already effectful).
 
 
 In this paper, the linearity convention is enforced by manual
-inspection. Manual inspection is unreliable, but wethear the linearity
+inspection. Manual inspection is unreliable, but weather the linearity
 convention is respected can be algorithmically decided. (See
 sec. \ref{rw-linearity})
 
@@ -705,10 +705,14 @@ than producing them.
 > class Contravariant f where
 >   contramap :: (b -> a) -> f a -> f b
 
-\begin{spec}
-instance Contravariant Snk where
-  contramap = mapSnk
-\end{spec}
+
+TODO: My GHC (7.8.4) complains with: Type synonym ‘Snk’ should have 1
+argument, but has been given none In the instance declaration for
+‘Contravariant Snk’
+
+> instance Contravariant Snk where
+>   contramap = mapSnk
+
 
 > sinkToSnk :: Sink a -> Snk a
 > sinkToSnk Full Nil = return ()
@@ -719,7 +723,7 @@ instance Contravariant Snk where
 
 If sinks are not comonads, are there some other structures that they
 implement? The package contravariant on hackage gives two classes;
-\var{Divisible} and \var{Decidable}, which are subclasses of
+\var{Divisible} and \var{Decidable}, which are superclasses (TODO: josef: subclasses?) of
 \var{Contravariant}, a class for contravariant functors. They are
 defined as follows:
 
@@ -730,18 +734,16 @@ defined as follows:
 The method \var{divide} can be seen as a dual of \var{zipWith} where
 elements are split and fed to two different sinks.
 
-\begin{spec}
-instance Divisible Snk where
-  divide div snk1 snk2 Nil = snk1 Nil <> snk2 Nil
-  divide div snk1 snk2 (Cons a ss) =
-    snk1 (Cons b $ \ss1 ->
-    snk2 (Cons c $ \ss2 ->
-    shiftSnk (divide div (sinkToSnk ss1)
-                         (sinkToSnk ss2)) ss))
-    where (b,c) = div a
-
-  conquer = plug
-\end{spec}
+> instance Divisible Snk where
+>   divide div snk1 snk2 Nil = snk1 Nil <> snk2 Nil
+>   divide div snk1 snk2 (Cons a ss) =
+>     snk1 (Cons b $ \ss1 ->
+>     snk2 (Cons c $ \ss2 ->
+>     shiftSnk (divide div (sinkToSnk ss1)
+>                          (sinkToSnk ss2)) ss))
+>     where (b,c) = div a
+>
+>   conquer = plug
 
 By using \var{divide} it is possible to split data and feed it to several
 sinks. Producing and consuming elements still happens in lock-step;
@@ -757,19 +759,18 @@ The class \var{Decidable} has the methods \var{lose} and \var{choose}:
 The function \var{choose} can split up a sink so that some elements
 go to one sink and some go to another.
 
-\begin{spec}
-instance Decidable Snk where
-  choose choice snk1 snk2 Nil = snk1 Nil <> snk2 Nil
-  choose choice snk1 snk2 (Cons a ss)
-    | Left b <- choice a = snk1 (Cons b $ \snk1' ->
-      shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
-  choose choice snk1 snk2 (Cons a ss)
-    | Right c <- choice a = snk2 (Cons c $ \snk2' ->
-      shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
+> instance Decidable Snk where
+>   choose choice snk1 snk2 Nil = snk1 Nil <> snk2 Nil
+>   choose choice snk1 snk2 (Cons a ss)
+>     | Left b <- choice a = snk1 (Cons b $ \snk1' ->
+>       shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
+>   choose choice snk1 snk2 (Cons a ss)
+>     | Right c <- choice a = snk2 (Cons c $ \snk2' ->
+>       shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
+>
+>   lose f Nil = return ()
+>   lose f (Cons a ss) = ss (Cont (lose f))
 
-  lose f Nil = return ()
-  lose f (Cons a ss) = ss (Cont (lose f))
-\end{spec}
 
 Table of effect-free functions
 ------------------------------
@@ -896,7 +897,7 @@ encountered, it is fed to the sink. If the parser fails, both ends of
 the stream are closed.
 
 > parse :: forall s a. Parser s a -> Src s -> Src a
-> parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x
+> parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x Fail
 >  where
 >   scan :: P s a -> Snk a -> Snk s
 >   scan (Result res  )  ret        xs     = ret
@@ -1510,7 +1511,7 @@ API is necessary to guarantee safety.
 
 A second advantage of our library is that effects are not required to
 be monads. Indeed, the use of continuations already provide the
-necessary structure to combine computations (recall in particualar
+necessary structure to combine computations (recall in particular
 that double negation is already a monad). We believe that having a
 single way to bind intermediate results (continuations vs. both
 continuations and monads) is a simplification in design, which may make
@@ -1557,10 +1558,10 @@ than monoid persists, and mismatching polarities are not discussed.
 Several production-strength libraries have been built upon the concept
 of iteratees, including *pipes* \citep{gonzalez_pipes_2015},
 *conduits* \citep{snoyman_conduit_2015} and *machines*
-\citep{kmett_machines_2015}.  While we focus our comparision with
+\citep{kmett_machines_2015}.  While we focus our comparison with
 iteratees, most of our analysis carries to the production libraries.
 There is additionally a large body of non peer-reviewed literature
-discussing and analysing on either iteratees or its variants. The
+discussing and analyzing on either iteratees or its variants. The
 proliferation of libraries for IO in Haskell indicates that a unifying
 foundation for them is needed, and we hope that the present paper
 provides a basis for such a foundation.
@@ -1934,6 +1935,8 @@ NOTE: commutative monads is SPJ Open Challenge #2 in his 2009 Talk "Wearing the 
 --  LocalWords:  iteratees citeyear iteratee Enumeratee elo eli GenT
 --  LocalWords:  enumeratees ReaderT caires Pucella Tov coutts tov js
 --  LocalWords:  acks url pandoc lhs bibliographystyle abbrvnat bs nb
---  LocalWords:  PaperTools lastSrc foldr
+--  LocalWords:  PaperTools lastSrc foldr Kiselov's natively runtime
+--  LocalWords:  async algorithmically tmpFile gonzalez snoyman kmett
+--  LocalWords:  Atze der Ploeg enumFromToSrc
 
 -->
