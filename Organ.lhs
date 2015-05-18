@@ -1465,7 +1465,7 @@ polarity. The negative polarity (Sinks, CoSrc) controls the execution
 thread, whereas the positive one (Sources, Co-sinks) provide
 data. This idea has recently been taken advantage of to
 bring efficient array programming facilities to functional programming
-\citep{bernardy_composable_2015,ankner_edsl_2013}.  TODO: josef: other citations
+\citep{bernardy_composable_2015,claessen2012expressive,ankner_edsl_2013}.
 
 This concept is central in the literature on Girard's linear logic
 \citep{laurent_etude_2002,zeilberger_logical_2009}. However, in the
