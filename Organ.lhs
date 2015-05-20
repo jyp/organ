@@ -1635,11 +1635,11 @@ foundation for them is needed, and we hope that the present paper
 provides a basis for such a foundation.
 
 
-FeldSpar monadic streams
+Feldspar monadic streams
 ------------------------
 
 Feldspar, a DSL for digital signal processing, has a notion of streams
-built on monads \citet{svenningsson15:monadic_streams}. In Haskell
+built on monads \citep{axelsson_feldspar_2010,svenningsson15:monadic_streams}. In Haskell
 the stream type can be written as follows:
 
 \begin{spec}
