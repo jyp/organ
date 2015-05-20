@@ -1,4 +1,7 @@
-% Push Streams, Pull Streams. How can Linear Types Help to solve the Lazy IO problem?
+---
+title: Push Streams, Pull Streams
+subtitle: Or How Can Linear Types Help to Solve the Lazy IO Problem?
+...
 
  <!--
 
