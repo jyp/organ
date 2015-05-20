@@ -134,7 +134,7 @@ How does our approach fare on the issues identified above? It shares
 the good properties of Kiselyov's solutions. First, the composition of
 two stream processors is guaranteed not to allocate more memory than
 the sum of its components. The composition of stream processors
-typically looks as follows, where \var{Src} is the type former for
+typically looks as follows, where \var{Src} is the type constructor for
 data sources.
 
 \begin{spec}
@@ -496,7 +496,7 @@ source, and the recursive case conveniently calls \var{mapSrc}.
 
 
 When using double negations, it is sometimes useful to insert or
-remove them inside type formers. For sources and sinks, one proceeds
+remove them inside type constructor. For sources and sinks, one proceeds
 as follows. Introduction of double negation in sources and its elimination
 in sinks is a special case of mapping.
 
