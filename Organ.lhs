@@ -772,8 +772,10 @@ TODO: My GHC (7.8.4) complains with: Type synonym ‘Snk’ should have 1
 argument, but has been given none In the instance declaration for
 ‘Contravariant Snk’
 
--- > instance Contravariant Snk where
--- >   contramap = mapSnk
+\begin{spec}
+instance Contravariant Snk where
+  contramap = mapSnk
+\end{spec}
 
 
 > sinkToSnk :: Sink a -> Snk a
@@ -796,16 +798,18 @@ defined as follows:
 The method \var{divide} can be seen as a dual of \var{zipWith} where
 elements are split and fed to two different sinks.
 
--- > instance Divisible Snk where
--- >   divide div snk1 snk2 Nil = snk1 Nil <> snk2 Nil
--- >   divide div snk1 snk2 (Cons a ss) =
--- >     snk1 (Cons b $ \ss1 ->
--- >     snk2 (Cons c $ \ss2 ->
--- >     shiftSnk (divide div (sinkToSnk ss1)
--- >                          (sinkToSnk ss2)) ss))
--- >     where (b,c) = div a
--- >
--- >   conquer = plug
+\begin{spec}
+instance Divisible Snk where
+  divide div snk1 snk2 Nil = snk1 Nil <> snk2 Nil
+  divide div snk1 snk2 (Cons a ss) =
+    snk1 (Cons b $ \ss1 ->
+    snk2 (Cons c $ \ss2 ->
+    shiftSnk (divide div (sinkToSnk ss1)
+                         (sinkToSnk ss2)) ss))
+    where (b,c) = div a
+
+  conquer = plug
+\end{spec}
 
 By using \var{divide} it is possible to split data and feed it to several
 sinks. Producing and consuming elements still happens in lock-step;
@@ -821,18 +825,19 @@ The class \var{Decidable} has the methods \var{lose} and \var{choose}:
 The function \var{choose} can split up a sink so that some elements
 go to one sink and some go to another.
 
--- > instance Decidable Snk where
--- >   choose choice snk1 snk2 Nil = snk1 Nil <> snk2 Nil
--- >   choose choice snk1 snk2 (Cons a ss)
--- >     | Left b <- choice a = snk1 (Cons b $ \snk1' ->
--- >       shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
--- >   choose choice snk1 snk2 (Cons a ss)
--- >     | Right c <- choice a = snk2 (Cons c $ \snk2' ->
--- >       shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
--- >
--- >   lose f Nil = return ()
--- >   lose f (Cons a ss) = ss (Cont (lose f))
+\begin{spec}
+instance Decidable Snk where
+  choose choice snk1 snk2 Nil = snk1 Nil <> snk2 Nil
+  choose choice snk1 snk2 (Cons a ss)
+    | Left b <- choice a = snk1 (Cons b $ \snk1' ->
+      shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
+  choose choice snk1 snk2 (Cons a ss)
+    | Right c <- choice a = snk2 (Cons c $ \snk2' ->
+      shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
 
+  lose f Nil = return ()
+  lose f (Cons a ss) = ss (Cont (lose f))
+\end{spec}
 
 Table of effect-free functions
 ------------------------------
