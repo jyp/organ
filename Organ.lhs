@@ -169,11 +169,15 @@ Native support for both flavours is important, because not all programs
 work well with a given polarity. It is sometimes useful to produce data using
 the push polarity, that is a function
 
+\begin{spec}
 f :: A -> CoSrc b
+\end{spec}
 
 can be written naturally but
 
+\begin{spec}
 g ::  A -> Src b
+\end{spec}
 
 requires a leaky recursion pattern.
 
@@ -181,7 +185,7 @@ CoSrc can be connected (of course);
 the conversion, which requires buffering can be extracted.
 
 
-
+Up to here.
 
 In our approach, if polarities do not match, the types will not match
 either. It is however still possible to compose functions! Assume a
@@ -768,8 +772,8 @@ TODO: My GHC (7.8.4) complains with: Type synonym ‘Snk’ should have 1
 argument, but has been given none In the instance declaration for
 ‘Contravariant Snk’
 
-> instance Contravariant Snk where
->   contramap = mapSnk
+-- > instance Contravariant Snk where
+-- >   contramap = mapSnk
 
 
 > sinkToSnk :: Sink a -> Snk a
@@ -792,16 +796,16 @@ defined as follows:
 The method \var{divide} can be seen as a dual of \var{zipWith} where
 elements are split and fed to two different sinks.
 
-> instance Divisible Snk where
->   divide div snk1 snk2 Nil = snk1 Nil <> snk2 Nil
->   divide div snk1 snk2 (Cons a ss) =
->     snk1 (Cons b $ \ss1 ->
->     snk2 (Cons c $ \ss2 ->
->     shiftSnk (divide div (sinkToSnk ss1)
->                          (sinkToSnk ss2)) ss))
->     where (b,c) = div a
->
->   conquer = plug
+-- > instance Divisible Snk where
+-- >   divide div snk1 snk2 Nil = snk1 Nil <> snk2 Nil
+-- >   divide div snk1 snk2 (Cons a ss) =
+-- >     snk1 (Cons b $ \ss1 ->
+-- >     snk2 (Cons c $ \ss2 ->
+-- >     shiftSnk (divide div (sinkToSnk ss1)
+-- >                          (sinkToSnk ss2)) ss))
+-- >     where (b,c) = div a
+-- >
+-- >   conquer = plug
 
 By using \var{divide} it is possible to split data and feed it to several
 sinks. Producing and consuming elements still happens in lock-step;
@@ -817,17 +821,17 @@ The class \var{Decidable} has the methods \var{lose} and \var{choose}:
 The function \var{choose} can split up a sink so that some elements
 go to one sink and some go to another.
 
-> instance Decidable Snk where
->   choose choice snk1 snk2 Nil = snk1 Nil <> snk2 Nil
->   choose choice snk1 snk2 (Cons a ss)
->     | Left b <- choice a = snk1 (Cons b $ \snk1' ->
->       shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
->   choose choice snk1 snk2 (Cons a ss)
->     | Right c <- choice a = snk2 (Cons c $ \snk2' ->
->       shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
->
->   lose f Nil = return ()
->   lose f (Cons a ss) = ss (Cont (lose f))
+-- > instance Decidable Snk where
+-- >   choose choice snk1 snk2 Nil = snk1 Nil <> snk2 Nil
+-- >   choose choice snk1 snk2 (Cons a ss)
+-- >     | Left b <- choice a = snk1 (Cons b $ \snk1' ->
+-- >       shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
+-- >   choose choice snk1 snk2 (Cons a ss)
+-- >     | Right c <- choice a = snk2 (Cons c $ \snk2' ->
+-- >       shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
+-- >
+-- >   lose f Nil = return ()
+-- >   lose f (Cons a ss) = ss (Cont (lose f))
 
 
 Table of effect-free functions
@@ -955,7 +959,7 @@ encountered, it is fed to the sink. If the parser fails, both ends of
 the stream are closed.
 
 > parse :: forall s a. Parser s a -> Src s -> Src a
-> parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x Fail
+> parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x
 >  where
 >   scan :: P s a -> Snk a -> Snk s
 >   scan (Result res  )  ret        xs     = ret
@@ -1780,6 +1784,13 @@ source is empty.
 > enumFromToSrc b e (Cont s)
 >   | b > e     = s Nil
 >   | otherwise = s (Cons b (enumFromToSrc (b+1) e))
+
+> enumFromToSrc' :: Int -> Int -> CoSrc Int
+> enumFromToSrc' _ _ Nil = mempty
+> enumFromToSrc' from to (Cons x xs) = do
+>   x from
+>   let !from' = from+1
+>   shiftSnk (enumFromToSrc' from' to) xs
 
 > linesSrc = flipSnk unlinesSnk
 
