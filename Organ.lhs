@@ -1,4 +1,4 @@
-% Resource-Aware Streams: A Linear Approach
+% Push Streams, Pull Streams. How can Linear Types Help to solve the Lazy IO problem?
 
  <!--
 
@@ -128,44 +128,57 @@ solves the issues described above, our grounding in linear logic
 allows us to support more stream programs, as we discuss below.
 
 How does our approach fare on the issues identified above? It shares
-the good properties of Kiselyov's solutions: 1. the composition of two
-stream processors is guaranteed not to allocate more memory than the
-sum of its components and 2. closing of resources is reliable.  Our
-approach improves on Kiselov's by natively capturing the production
-(or consumption) pattern of streams in their types. We have two kinds
-of streams: pull streams (annotated with +) and push streams
-(annotated with -).
+the good properties of Kiselyov's solutions. First, the composition of
+two stream processors is guaranteed not to allocate more memory than
+the sum of its components. The composition of stream processors
+typically looks as follows, where \var{Src} is the type former for
+data sources.
 
-For example, the contents of a file can be pulled at will;
-therefore it is a pull-source of data:
-\begin{spec} fileSrc :: FilePath -> Src String \end{spec}
+\begin{spec}
+f :: Src a -> Src b
+g :: Src b -> Src c
+h = g . f
+\end{spec}
 
-Some data sources will be of the push kind; for example, if the
-standard input terminal expects its data to be processed immediately
-it should be given that polarity:
-
-\begin{spec} stdinSrc :: CoSrc String \end{spec}
-
-Besides data sources, we have also data sinks. A terminal may also
-function as a data sink. As above, sending data may have
-to wait for a terminal to be ready; hence it is a
-push-sink of data:
-
-\begin{spec} stdoutSnk :: Snk String \end{spec}
-
-Streams can be connected directly iff
-* polarities are opposite
-* one is a data source and the other a data sink
-
-We have for example the following function:
-\begin{spec} fwd :: Src a -> Snk a -> IO () \end{spec}
-
-Printing a file can thus implemented as follows:
+Second, closing of resources is reliable, even in the presence of
+exceptions. Printing a file can thus implemented as follows:
 
 > main = fileSrc "foo" `fwd` stdoutSnk
 
-(Often, a stream processor will be inserted in-between reading and
-printing.)
+where the various library functions have the following types:
+
+\begin{spec}
+stdoutSnk :: Snk String
+fileSrc :: FilePath -> Src String
+fwd :: Src a -> Snk a -> IO ()
+\end{spec}
+
+The type \var{Snk} stands for a data sink, and \var{fwd} forwards data
+from a source to a sink.  The above type signatures reveal a first
+improvement of our approach over Kiselyov's: we natively support both
+sources and sinks. In itself this may appear to be a superficial
+advantage.  However, duality is fundamental in our work: the existence
+of both sources and sinks is based on support for two kinds of
+streams: pull streams and push streams, while Kiselyov's iteratees are
+heavily geared towards pull streams.
+
+Native support for both flavours is important, because not all programs
+work well with a given polarity. It is sometimes useful to produce data using
+the push polarity, that is a function
+
+f :: A -> CoSrc b
+
+can be written naturally but
+
+g ::  A -> Src b
+
+requires a leaky recursion pattern.
+
+CoSrc can be connected (of course);
+the conversion, which requires buffering can be extracted.
+
+
+
 
 In our approach, if polarities do not match, the types will not match
 either. It is however still possible to compose functions! Assume a
@@ -276,7 +289,7 @@ structure is a mere diversion.
 
 
 
-Streams
+Streams (Pull sources, push sinks)
 =======
 
 Our guiding design principle is duality. This principle is reflected in

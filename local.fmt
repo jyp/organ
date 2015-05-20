@@ -3,7 +3,7 @@
 %format <>         = "<\!> "
 %include forall.fmt
 
-%format Snk = "Snk" "^{-}"
-%format Src = "\var{Src}^{+}"
-%format CoSnk = "Snk" "^{+}"
-%format CoSrc = "\var{Src}^{-}"
+% %format Snk = "Snk" "^{-}"
+% %format Src = "\var{Src}^{+}"
+% %format CoSnk = "Snk" "^{+}"
+% %format CoSrc = "\var{Src}^{-}"
