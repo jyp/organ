@@ -745,6 +745,8 @@ in \var{concatAux}.
 (The monad laws can be proved by mutual induction, using a pattern
 similar to the monoid laws.)
 
+\paragraph{Comonad?}
+
 Given the duality between sources and sinks, and the fact that sources
 are monads, it might be tempting to draw the conclusion that sinks are
 comonads. This is not the case. To see why, consider that every
@@ -789,7 +791,7 @@ instance Contravariant Snk where
 If sinks are not comonads, are there some other structures that they
 implement? The package contravariant on hackage gives two classes;
 \var{Divisible} and \var{Decidable}, which are subclasses of
-\var{Contravariant}, a class for contravariant functors. They are
+\var{Contravariant}, a class for contravariant functors \citep{kmett_contravariant}. They are
 defined as follows:
 
 > class Contravariant f => Divisible f where
@@ -902,9 +904,6 @@ the second argument sink.
 Filter a source, and the dual.
 
 > filterSrc :: (a -> Bool) -> Src a -> Src a
-
-Dual to \var{filterSrc}
-
 > filterSnk :: (a -> Bool) -> Snk a -> Snk a
 
 Turn a source of chunks of data into a single source; and the dual.
@@ -937,7 +936,7 @@ A parser is producing the double negation of $a$:
 
 > newtype Parser s a = P (forall res. (a -> P s res) -> P s res)
 
-The monadic interface can then be built using shift and unshift:
+The monadic interface can then be built in the standard way:
 
 > instance Monad (Parser s) where
 >   return x  = P $ \fut -> fut x
@@ -1234,8 +1233,7 @@ co-sinks.
 > mapCoSnk :: (b -> a) -> CoSnk a -> CoSnk b
 > mapCoSnk f = mapSrc (\b' -> \a -> b' (f a))
 
-
-One access elements of a co-source only "one at a time". That is, one
+Elements of a co-source are access only "one at a time". That is, one
 cannot extract the contents of a co-source as a list. Attempting to
 implement this extraction looks as follows.
 
@@ -1359,8 +1357,8 @@ advantage of to run effects concurrently, as follows:
 >    shiftSrc xs' $ \sna ->
 >    concurrently sa sna)
 
-The above strategy is useful if one expects production or consumption
-of elements to be expensive and distributable over computation units.
+The above strategy is useful if the production or consumption
+of elements is expensive and distributable over computation units.
 While the above implementation naively spawns a thread for every
 element, in reality one will most likely want to divide the stream
 into chunks before spawning threads. Because strategies are separate
@@ -1593,7 +1591,7 @@ make heavy use of the following types:
 > type Enumeratee elo eli m a =
 >         I eli m a -> I elo m (I eli m a)
 
-As far as we understand these types make up for the lack of explicit
+It is our understanding that these types make up for the lack of explicit
 sources by putting iteratees (sinks) on the left-hand-side of an
 arrow. Enumerators are advantageously replaced by sources, and
 enumeratees by simple functions from source to source (or sink to
