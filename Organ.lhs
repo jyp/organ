@@ -1683,7 +1683,8 @@ Table of Functions: implementations
 >       Nil -> as Full <> sab Nil
 >       Cons b bs -> fwd (cons (a,b) $ zipSrc as bs) sab
 
-> forkSrc sab ta tb = shiftSnk (zipSnk ta (flip forward tb)) sab
+> forkSrc sab ta tb
+>   = shiftSnk (zipSnk ta (flip forward tb)) sab
 
 > zipSnk sa sb Nil = sa Nil <> sb Nil
 > zipSnk sa sb (Cons (a,b) tab) = sa $ Cons a $ \sa' ->
@@ -1693,7 +1694,8 @@ Table of Functions: implementations
 > scanSrc f !z = flipSnk (scanSnk f z)
 
 > scanSnk _ _ snk Nil          = snk Nil
-> scanSnk f z snk (Cons a s)   = snk $ Cons next $ scanSrc f next s
+> scanSnk f z snk (Cons a s)   = snk $  Cons next $
+>                                       scanSrc f next s
 >   where next = f z a
 
 > foldSrc' f !z s nb = s (Cont (foldSnk' f z nb))
