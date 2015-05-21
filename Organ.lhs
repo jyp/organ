@@ -1653,7 +1653,7 @@ mismatch.
 
 We gratefully thank Koen Claessen, Atze van der Ploeg and Nicolas
 Pouillard for feedback on drafts of this paper.  The source code for
-this paper is a literate Haskell file, while latest version is
+this paper is a literate Haskell file, whose latest version is
 available at this url:
 https://gist.github.com/jyp/fadd6e8a2a0aa98ae94d
 
