@@ -276,7 +276,7 @@ Streams
 =======
 
 Our guiding design principle is duality. This principle is reflected in
-the design of the streaming library: we will not only have a type for
+the design of the streaming library: we not only have a type for
 sources of data but also a type for sinks. For example, a simple
 stream processor reading from a single source and writing to a single
 sink will be given the following type:
@@ -896,7 +896,7 @@ the stream are closed.
 >  where
 >   scan :: P s a -> Snk a -> Snk s
 >   scan (Result res  )  ret        xs     = ret
->                                            (Cons res $ parse q $ forward xs)
+>        (Cons res $ parse q $ forward xs)
 >   scan Fail            ret        xs     = ret Nil <> forward xs Full
 >   scan (Sym f)         mres       xs     = case xs of
 >     Nil        -> scan (f Nothing) mres Nil
