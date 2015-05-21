@@ -130,12 +130,12 @@ Kiselyov's *iteratees* (\citeyear{kiselyov_iteratees_2012}) already
 solves the issues described above, our grounding in linear logic
 allows us to support more stream programs, as we discuss below.
 
-How does our approach fare on the issues identified above? It shares
-the good properties of Kiselyov's solutions. First, the composition of
-two stream processors is guaranteed not to allocate more memory than
-the sum of its components. The composition of stream processors
-typically looks as follows, where \var{Src} is the type constructor for
-data sources.
+We introduce two types, \var{Src} and \var{Snk}, for solving the two
+problems above. These two types denote streams that
+produce and consume elements respectively. Composing functions
+on such streams is guaranteed not to allocate more memory than the sum
+of its components. Translating the first code example above would
+look as follows:
 
 \begin{spec}
 f :: Src a -> Src b
