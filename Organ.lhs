@@ -257,7 +257,7 @@ equivalent to producing a result of type $N α$. In this paper we call
 these equivalences the duality principle.
 
 In classical logic, negation is involutive; that is:
-$\var{NN}\,a = a$
+$\var{NN}\,α = α$
 However, because we work within Haskell, we
 do not have this equality.  We can come close enough though.
 First, double negations can always be introduced, using the
