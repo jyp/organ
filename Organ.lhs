@@ -785,7 +785,7 @@ Zip two sources, and the dual.
 or: forkSnk :: Snk (a,b) -> Snk a ⅋ Snk b
 -->
 
-Unzip a source (sending data to parallel sources), and the dual.
+Zip two sinks, and the dual.
 
 > forkSrc :: Src (a,b) -> Snk a -> Src b
 > zipSnk :: Snk a -> Snk b -> Snk (a,b)
@@ -1048,8 +1048,6 @@ While the guarantees have been discussed so far, it may be unclear how
 synchronicity actually restricts the programs one can write. In the
 rest of the section we show by example how the restriction plays out.
 
- <!--
-
 Example: demultiplexing
 -----------------------
 
@@ -1135,8 +1133,6 @@ forces us to produce its arguments independently.
 
 What we need to do is to reverse the control fully: we need a data
 source which is in control of the flow of execution.
-
- -->
 
 Co-Sources, Co-Sinks
 -------------------
