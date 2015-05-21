@@ -57,7 +57,7 @@ Introduction
 ============
 
 As \citet{hughes_functional_1989} famously noted, the strength of
-functional programming languages lie in the composition mechanisms
+functional programming languages resides in the composition mechanisms
 that they provide. That is, simple components can be built and
 understood in isolation; one does not need to worry about interference
 effects when composing them. In particular, lazy evaluation affords to
@@ -65,7 +65,7 @@ construct complex programs by pipelining simple list transformation
 functions. Indeed, while strict evaluation forces to fully reify each
 intermediate result between each computational step, lazy
 evaluation allows to run all the computations concurrently, often
-without ever allocating more that a single intermediate element at a time.
+without ever allocating more than a single intermediate element at a time.
 
 Unfortunately, lazy evaluation suffers from two drawbacks.  First, it
 has unpredictable memory behavior. Consider the following function
@@ -79,7 +79,7 @@ h = g . f
 
 \noindent One hopes that, at run-time, the intermediate list ($[b]$)
 will only be allocated element-wise, as outlined above. Unfortunately,
-this desired behavior does not necessarily happen. Indeed, a
+this desired behavior does not always happen. Indeed, a
 necessary condition is that the production pattern of $f$ matches the
 consumption pattern of $g$; otherwise buffering occurs. In practice,
 this means that a seemingly innocuous change in either of the function
@@ -129,14 +129,14 @@ the computational behavior of Girard's linear logic
 paper is as an advocacy for linear types support in Haskell. While
 Kiselyov's *iteratees* (\citeyear{kiselyov_iteratees_2012}) already
 solves the issues described above, our grounding in linear logic
-allows us to support more stream programs, as we discuss below.
+yields a richer language of types for data streams, capturing
+various production and consumption patterns.
 
-We introduce two types of streams, \var{Src} for producing elements
-and \var{Snk} for consuming elements. These types help tackling the
-first problem above using the following guarantee: composing functions
-on such streams is guaranteed not to allocate more memory than the sum
-of its components. Translating the first code example above would
-look as follows:
+First, the type corresponding to on-demand production of elements is called a
+source (\var{Src}). An adaptation of the first code example above to
+use sources would look as follows, and give the guarantee that the
+composition does not allocate more memory than the sum of its
+components.
 
 \begin{spec}
 f :: Src a -> Src b
@@ -144,38 +144,45 @@ g :: Src b -> Src c
 h = g . f
 \end{spec}
 
-Second, closing of resources is reliable, even in the presence of
-exceptions. Printing a file can thus implemented as follows:
-
-> main = fileSrc "foo" `fwd` stdoutSnk
-
-\noindent where \var{fwd} forwards data from a source to a sink.
-The various library functions have the following types:
+Second, the type driving the consumption of elements is called a sink
+(\var{Snk}).  For example, the standard output is naturally given a
+sink type:
 
 \begin{spec}
 stdoutSnk :: Snk String
+\end{spec}
+
+Using it, we can implement the printing of a file as follows, and
+guarantee the timely release of resources, even in the presence of
+exceptions:
+
+> main = fileSrc "foo" `fwd` stdoutSnk
+
+In the above \var{fileSrc} provides the contents of a file, and
+\var{fwd} forwards data from a source to a sink.  The types are as
+follows:
+
+\begin{spec}
 fileSrc :: FilePath -> Src String
 fwd :: Src a -> Snk a -> IO ()
 \end{spec}
 
-Supporting both sources and sinks may appear to be a superficial
-advantage, compare to the approach of Kiselyov. However, duality is
-fundamental in our work: the existence of both sources and sinks is
-based on support for streams with two kinds of polarities: pull streams
-and push streams, while Kiselyov's iteratees are heavily geared
-towards pull streams. Push streams control the flow of computation,
-while pull stream respond to it. The type \var{Snk} pushes while
-\var{Src} pull. However, we also support in particular data sources
-with push-flavour, called co-sources.  This is useful for example when
-a source needs precise control over the execution of effects it embeds
-(sec Sec. \ref{async}). For example, sources cannot be unzipped, but
+Sources provide data on-demand, while sinks decide when they are ready
+to consume data. This is an instance of the push/pull duality.  In
+general, push-streams control the flow of computation, while
+pull-streams respond to it. We will see that this polarization does
+not need to match the flow of data. We support in particular data
+sources with push-flavour, called co-sources (\var{CoSrc}).
+Co-sources are useful for example when a data stream needs precise
+control over the execution of effects it embeds (sec
+Sec. \ref{async}). For example, sources cannot be demultiplexed, but
 co-sources can.
 
 In a program which uses both sources and co-sources, the need might
-arise to compose a function producing a co-source with a program
-consuming a source: this is the situation where list-based programs
-would silently cause memory allocation. In our approach, this
-situation is caught by the type system, and the user must explicitly
+arise to compose a function which returns a co-source with a function
+which takes a source as input: this is the situation where list-based
+programs would silently cause memory allocation. In our approach, this
+mismatch is caught by the type system, and the user must explicitly
 conjure a buffer to be able to write the composition:
 
 \begin{spec}
@@ -2002,3 +2009,9 @@ NOTE: commutative monads is SPJ Open Challenge #2 in his 2009 Talk "Wearing the 
 --  LocalWords:  Atze der Ploeg enumFromToSrc
 
 -->
+Supporting both sources and sinks may appear to be a superficial
+advantage, compared to the approach of Kiselyov. However, duality is
+fundamental in our work: the existence of both sources and sinks is
+based on support for streams with two kinds of polarities: pull
+streams and push streams, while Kiselyov's iteratees are heavily
+geared towards pull streams.
