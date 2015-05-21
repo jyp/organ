@@ -146,6 +146,8 @@ h = g . f
 Second, closing of resources is reliable, even in the presence of
 exceptions. Printing a file can thus implemented as follows:
 
+TODO: leftover stdOut sink?
+
 > main = fileSrc "foo" `fwd` stdoutSnk
 
 where the various library functions have the following types:
@@ -163,46 +165,24 @@ sources and sinks. In itself this may appear to be a superficial
 advantage.  However, duality is fundamental in our work: the existence
 of both sources and sinks is based on support for two kinds of
 streams: pull streams and push streams, while Kiselyov's iteratees are
-heavily geared towards pull streams.
+heavily geared towards pull streams. Push streams control the flow of
+computation, while pull stream respond to it. We support in particular
+data sources with push-flavour, called co-sources. This is useful for
+example when a source needs precise control over the execution of
+effects it embeds (sec Sec. \ref{todo}).
 
-Native support for both flavours is important, because not all programs
-work well with a given polarity. It is sometimes useful to produce data using
-the push polarity, that is a function
-
-\begin{spec}
-f :: A -> CoSrc b
-\end{spec}
-
-can be written naturally but
-
-\begin{spec}
-g ::  A -> Src b
-\end{spec}
-
-requires a leaky recursion pattern.
-
-CoSrc can be connected (of course);
-the conversion, which requires buffering can be extracted.
-
-
-Up to here.
-
-In our approach, if polarities do not match, the types will not match
-either. It is however still possible to compose functions! Assume a
-function \var{f} producing a push stream and function \var{g}
-consuming a pull stream.
+In a program which uses both sources and co-sources, the need might
+arise to compose a function producing a co-source with a program
+consuming a source: this is the situation where list-based programs
+would silently cause memory allocation. In our approach, this
+situation is caught by the type system, and the user must explicitly
+conjure a buffer to be able to write the composition:
 
 \begin{spec}
-f :: A -> CoSrc b
-g :: Src b -> C
+f :: Src a -> CoSrc b
+g :: Src b -> Src c
+h = g . buffer . f
 \end{spec}
-
-The composition can then be programmed by inserting an explicit
-\var{buffer}, which ensures that \var{f} never blocks on unconsumed
-output (at the cost of potentially unbounded memory allocation):
-
-\begin{spec} h = g . buffer . f \end{spec}
-
 
 The contributions of this paper are
 
@@ -296,7 +276,7 @@ structure is a mere diversion.
 
 
 
-Streams (Pull sources, push sinks)
+Streams
 =======
 
 Our guiding design principle is duality. This principle is reflected in
@@ -853,9 +833,16 @@ Zip two sources, and the dual.
 > zipSrc :: Src a -> Src b -> Src (a,b)
 > unzipSnk :: Snk (a,b) -> Src a -> Src b -> Eff
 
+TODO:
+
+> unzipSnk :: Snk (a,b) -> Src a -> Snk b
+
 Unzip a source (sending data to parallel sources), and the dual.
 
 > unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
+
+> unzipSrc :: Src (a,b) -> Snk a -> Src b
+
 > zipSnk :: Snk a -> Snk b -> Snk (a,b)
 
 Equivalent of \var{scanl'} for sources, and the dual
