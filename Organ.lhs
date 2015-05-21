@@ -14,7 +14,6 @@ subtitle: How Can Linear Types Help to Solve the Lazy IO Problem?
 > import Data.IORef
 > import Data.Monoid
 > import Prelude hiding (tail)
-> -- import Control.Monad
 
 -->
 
