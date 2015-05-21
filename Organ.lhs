@@ -1,6 +1,6 @@
 ---
 title: Push Streams, Pull Streams
-subtitle: Or How Can Linear Types Help to Solve the Lazy IO Problem?
+subtitle: How Can Linear Types Help to Solve the Lazy IO Problem?
 ...
 
  <!--
@@ -167,9 +167,10 @@ of both sources and sinks is based on support for two kinds of
 streams: pull streams and push streams, while Kiselyov's iteratees are
 heavily geared towards pull streams. Push streams control the flow of
 computation, while pull stream respond to it. We support in particular
-data sources with push-flavour, called co-sources. This is useful for
+data sources with push-flavour, called co-sources.  This is useful for
 example when a source needs precise control over the execution of
-effects it embeds (sec Sec. \ref{todo}).
+effects it embeds (sec Sec. \ref{async}). For example, sources cannot
+be unzipped, but co-sources can.
 
 In a program which uses both sources and co-sources, the need might
 arise to compose a function producing a co-source with a program
@@ -301,7 +302,7 @@ simple :: Src a -> Src a
 However, having explicit access to sinks allows us to (for example)
 dispatch a single source to multiple sinks, as in the following type signature:
 \begin{spec}
-unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
+forkSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
 \end{spec}
 Familiarity with duality will be crucial in the later sections of this paper.
 
@@ -700,10 +701,6 @@ than producing them.
 >   contramap :: (b -> a) -> f a -> f b
 
 
-TODO: My GHC (7.8.4) complains with: Type synonym ‘Snk’ should have 1
-argument, but has been given none In the instance declaration for
-‘Contravariant Snk’
-
 \begin{spec}
 instance Contravariant Snk where
   contramap = mapSnk
@@ -782,18 +779,15 @@ implementation is available in the appendix.
 Zip two sources, and the dual.
 
 > zipSrc :: Src a -> Src b -> Src (a,b)
-> unzipSnk :: Snk (a,b) -> Src a -> Src b -> Eff
+> forkSnk :: Snk (a,b) -> Src a -> Snk b
 
-TODO:
-
-> unzipSnk :: Snk (a,b) -> Src a -> Snk b
+ <!--
+or: forkSnk :: Snk (a,b) -> Snk a ⅋ Snk b
+-->
 
 Unzip a source (sending data to parallel sources), and the dual.
 
-> unzipSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
-
-> unzipSrc :: Src (a,b) -> Snk a -> Src b
-
+> forkSrc :: Src (a,b) -> Snk a -> Src b
 > zipSnk :: Snk a -> Snk b -> Snk (a,b)
 
 Equivalent of \var{scanl'} for sources, and the dual
@@ -1054,6 +1048,8 @@ While the guarantees have been discussed so far, it may be unclear how
 synchronicity actually restricts the programs one can write. In the
 rest of the section we show by example how the restriction plays out.
 
+ <!--
+
 Example: demultiplexing
 -----------------------
 
@@ -1139,6 +1135,8 @@ forces us to produce its arguments independently.
 
 What we need to do is to reverse the control fully: we need a data
 source which is in control of the flow of execution.
+
+ -->
 
 Co-Sources, Co-Sinks
 -------------------
@@ -1674,22 +1672,22 @@ TODO. The paper is typeset using pandoc, lhs2TeX and latex.
 Table of Functions: implementations
 ===================================
 
-> zipSrc s1 s2 = unshiftSrc (\t -> unzipSnk t s1 s2)
+> zipSrc s1 s2 t3 = shiftSrc s2 $ \s -> unshiftSrc (\t -> forkSnk t s1 s) t3
 
-> unzipSnk sab ta tb =
+> forkSnk sab ta tb =
 >   shiftSrc ta $ \ta' ->
 >   case ta' of
->     Nil -> tb Full <> sab Nil
->     Cons a as ->  shiftSrc tb $ \tb' ->  case tb' of
+>     Nil -> (forward tb) Full <> sab Nil
+>     Cons a as ->  case tb of
 >       Nil -> as Full <> sab Nil
 >       Cons b bs -> fwd (cons (a,b) $ zipSrc as bs) sab
 
-> unzipSrc sab ta tb = shiftSnk (zipSnk ta tb) sab
+> forkSrc sab ta tb = shiftSnk (zipSnk ta (flip forward tb)) sab
 
 > zipSnk sa sb Nil = sa Nil <> sb Nil
 > zipSnk sa sb (Cons (a,b) tab) = sa $ Cons a $ \sa' ->
 >                                 sb $ Cons b $ \sb' ->
->                                 unzipSrc tab (flip forward sa') (flip forward sb')
+>                                 forkSrc tab (flip forward sa') sb'
 
 > scanSrc f !z = flipSnk (scanSnk f z)
 
@@ -1888,7 +1886,7 @@ The \var{Cons} case uses mutual induction:
 
 (We omit the \var{Nil} case; it is similar to the \var{Full} case)
 
-  <!--
+ <!--
 
 ScratchPad
 ==========
@@ -1970,7 +1968,7 @@ NOTE: commutative monads is SPJ Open Challenge #2 in his 2009 Talk "Wearing the 
 --  LocalWords:  effectful kiselyov openFile ReadMode hGetContents NN
 --  LocalWords:  putStr hClose Girard fileSrc stdoutSnk stdout Src
 --  LocalWords:  compositional mempty mappend Dually involutive Snk
---  LocalWords:  unshift monadic versa unzipSrc textit iff rw eof pre
+--  LocalWords:  unshift monadic versa forkSrc textit iff rw eof pre
 --  LocalWords:  consumptions onSource onSink unshiftSnk unshiftSrc
 --  LocalWords:  shiftSnk shiftSrc kk flipSnk flipSrc mapSrc mapSnk
 --  LocalWords:  snk formers dnintro dndel duals takeSrc takeSnk th
@@ -1979,7 +1977,7 @@ NOTE: commutative monads is SPJ Open Challenge #2 in his 2009 Talk "Wearing the 
 --  LocalWords:  contravariant concatSrcSrc concatSnkSrc concatAux mx
 --  LocalWords:  TODO ssrc monads comonads comonad counit contramap
 --  LocalWords:  sinkToSnk superclasses josef subclasses zipWith Sym
---  LocalWords:  zipSrc unzipSnk zipSnk scanl scanSrc scanSnk foldl
+--  LocalWords:  zipSrc forkSnk zipSnk scanl scanSrc scanSnk foldl
 --  LocalWords:  foldSrc foldSnk dropSrc dropSnk fromList toList ret
 --  LocalWords:  linesSrc unlinesSnk untilSnk interleaveSnk filterSrc
 --  LocalWords:  filterSnk unchunk chunkSnk claessen newtype forall
