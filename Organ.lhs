@@ -77,7 +77,7 @@ g :: [b] -> [c]
 h = g . f
 \end{spec}
 
-One hopes that, at run-time, the intermediate list ($[b]$)
+\noindent One hopes that, at run-time, the intermediate list ($[b]$)
 will only be allocated element-wise, as outlined above. Unfortunately,
 this desired behavior does not necessarily happen. Indeed, a
 necessary condition is that the production pattern of $f$ matches the
@@ -109,7 +109,7 @@ main = do  inFile <- openFile "foo" ReadMode
            putStr contents
 \end{spec}
 
-Indeed, the \var{putStr} and \var{hClose} commands act on unrelated
+\noindent Indeed, the \var{putStr} and \var{hClose} commands act on unrelated
 resources, and thus swapping them should have no observable effect.
 However, while the first program prints the `foo` file, the second one
 prints nothing.  Indeed, because \var{hGetContents} reads the file
@@ -149,7 +149,7 @@ exceptions. Printing a file can thus implemented as follows:
 
 > main = fileSrc "foo" `fwd` stdoutSnk
 
-where \var{fwd} forwards data from a source to a sink.
+\noindent where \var{fwd} forwards data from a source to a sink.
 The various library functions have the following types:
 
 \begin{spec}
@@ -266,7 +266,7 @@ collapsed to a single one:
 > unshift :: N (NN a) -> N a
 > unshift k x = k (shift x)
 
-The above two functions are the \var{return} and \var{join} of the
+\noindent The above two functions are the \var{return} and \var{join} of the
 double negation monad\footnote{for \var{join}, substitute $N\,a$ for
 $a$}; indeed adding a double negation in the type corresponds to
 sending the return value to its consumer. However, we will not be
@@ -377,6 +377,7 @@ and the remaining source.
 > await Nil eof _ = eof
 > await (Cons x cs) _ k = cs $ Cont $ \xs -> k x xs
 
+\noindent
 However, the above function breaks the linearity invariant, so we will
 refrain to use it as such. The pattern that it defines is still
 useful: it is valid when the second and third argument consume the
@@ -415,6 +416,7 @@ use instead pre-negated versions of sources and sink:
 > type Src   a = N  (Sink a)
 > type Snk   a = N  (Source a)
 
+\noindent
 These definitions have the added advantage to perfect the duality
 between sources and sinks, while not restricting the programs one can
 write.
@@ -426,7 +428,7 @@ Indeed, one can access the underlying structure as follows:
 > onSource  f   s = f   (\t -> forward s t)
 > onSink    f   t = f   (\s -> forward s t)
 
-
+\noindent
 And, while a negated \var{Sink} cannot be converted to a
 \var{Source}, all the following conversions are implementable:
 
@@ -480,21 +482,21 @@ remove them inside type constructor. For sources and sinks, one proceeds
 as follows. Introduction of double negation in sources and its elimination
 in sinks is a special case of mapping.
 
-> dnintro :: Src a -> Src (NN a)
-> dnintro = mapSrc shift
+> nnIntro :: Src a -> Src (NN a)
+> nnIntro = mapSrc shift
 
-> dndel' :: Snk (NN a) -> Snk a
-> dndel' = mapSnk shift
+> nnElim' :: Snk (NN a) -> Snk a
+> nnElim' = mapSnk shift
 
 The duals are easily implemented by case analysis, following the mutual
 recursion pattern introduced above.
 
-> dndel :: Src (NN a) -> Src a
-> dnintro' :: Snk a -> Snk (NN a)
+> nnElim :: Src (NN a) -> Src a
+> nnIntro' :: Snk a -> Snk (NN a)
 
-> dndel = flipSnk dnintro'
-> dnintro' k Nil = k Nil
-> dnintro' k (Cons x xs) = x $ \x' -> k (Cons x' $ dndel xs)
+> nnElim = flipSnk nnIntro'
+> nnIntro' k Nil = k Nil
+> nnIntro' k (Cons x xs) = x $ \x' -> k (Cons x' $ nnElim xs)
 
 
 Effect-Free Streams
@@ -1148,7 +1150,7 @@ Implementing multiplexing on co-sources is then straightforward, by
 leveraging \var{dmux'}:
 
 > mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
-> mux' sa sb = unshiftSnk $ \tab -> dmux' (dndel tab) sa sb
+> mux' sa sb = unshiftSnk $ \tab -> dmux' (nnElim tab) sa sb
 
 
 We use the rest of the section to study the property of co-sources and
@@ -1363,7 +1365,7 @@ All the above buffering operations work on sources, but they can be generically
 inverted to work on sinks, as follows.
 
 > flipBuffer :: (forall a. CoSrc a -> Src a) -> Snk b -> CoSnk b
-> flipBuffer f s = f (dnintro' s)
+> flipBuffer f s = f (nnIntro' s)
 
 
 Summary
