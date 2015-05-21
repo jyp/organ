@@ -1176,12 +1176,12 @@ cannot extract the contents of a co-source as a list. Attempting to
 implement this extraction looks as follows.
 
 > coToList :: CoSrc a -> NN [a]
-> coToList k1 k2 = k1 $ Cons (\a -> k2 [a]) (error "rest") -- (1)
-> coToList k1 k2 = k2 $ (error "a?") : (error "rest")      -- (2)
+> coToList k1 k2 = k1 $ Cons (\a -> k2 [a]) (error "rest")
+> coToList k1 k2 = k2 $ (error "a?") : (error "rest")
 
-If one tries to begin by eliminating the co-source (1), then there is no
+If one tries to begin by eliminating the co-source (first equation), then there is no
 way to produce subsequent elements of the list. If one tries to begin
-by constructing the list (2), then no data is available.
+by constructing the list (second equation), then no data is available.
 
 Yet it is possible to define useful and effectful co-sources and
 co-sinks. The first example shows how to provide a file as a co-source:
@@ -1556,8 +1556,9 @@ type Transducer m1 m2 e1 e2 =
   Producer m1 e1 -> Producer m2 e2
 \end{spec}
 
-Yet, linearity is still not mentioned, the use of a monad rather
-than monoid persists, and mismatching polarities are not discussed.
+Yet, in that work, linearity is still not mentioned, the use of a
+monad rather than monoid persists, and mismatching polarities are not
+discussed.
 
 Several production-strength libraries have been built upon the concept
 of iteratees, including *pipes* \citep{gonzalez_pipes_2015},
@@ -1565,10 +1566,10 @@ of iteratees, including *pipes* \citep{gonzalez_pipes_2015},
 \citep{kmett_machines_2015}.  While we focus our comparison with
 iteratees, most of our analysis carries to the production libraries.
 There is additionally a large body of non peer-reviewed literature
-discussing and analyzing on either iteratees or its variants. The
-proliferation of libraries for IO in Haskell indicates that a unifying
-foundation for them is needed, and we hope that the present paper
-provides a basis for such a foundation.
+discussing and analyzing either iteratees or its variants. The
+proliferation of libraries for IO streaming in Haskell indicates that
+a unifying foundation for them is needed, and we hope that the present
+paper provides a basis for such a foundation.
 
 
 Feldspar monadic streams
@@ -1972,6 +1973,15 @@ NOTE: commutative monads is SPJ Open Challenge #2 in his 2009 Talk "Wearing the 
 > type a ⅋ b = N a -> N b -> Eff
 
 
+
+Supporting both sources and sinks may appear to be a superficial
+advantage, compared to the approach of Kiselyov. However, duality is
+fundamental in our work: the existence of both sources and sinks is
+based on support for streams with two kinds of polarities: pull
+streams and push streams, while Kiselyov's iteratees are heavily
+geared towards pull streams.
+
+
 --  LocalWords:  forkIO readChan writeChan newChan Applicative IORef
 --  LocalWords:  coroutine Coroutines hughes compositionality inFile
 --  LocalWords:  effectful kiselyov openFile ReadMode hGetContents NN
@@ -2009,9 +2019,3 @@ NOTE: commutative monads is SPJ Open Challenge #2 in his 2009 Talk "Wearing the 
 --  LocalWords:  Atze der Ploeg enumFromToSrc
 
 -->
-Supporting both sources and sinks may appear to be a superficial
-advantage, compared to the approach of Kiselyov. However, duality is
-fundamental in our work: the existence of both sources and sinks is
-based on support for streams with two kinds of polarities: pull
-streams and push streams, while Kiselyov's iteratees are heavily
-geared towards pull streams.

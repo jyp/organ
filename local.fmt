@@ -1,6 +1,9 @@
 %format <$>         = "<\!\!\$\!\!> "
 %format <|>         = "<\!\!|\!\!> "
+
 %format <>         = "<\!> "
+%format mappend         = (<>)
+
 %include forall.fmt
 
 % %format Snk = "Snk" "^{-}"
