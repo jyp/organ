@@ -257,7 +257,7 @@ equivalent to producing a result of type $N α$. In this paper we call
 these equivalences the duality principle.
 
 In classical logic, negation is involutive; that is:
-$\var{NN}\,a = a$
+$\var{NN}\,α = α$
 However, because we work within Haskell, we
 do not have this equality.  We can come close enough though.
 First, double negations can always be introduced, using the
@@ -285,7 +285,6 @@ structure is a mere diversion.
 
 Streams
 =======
-\label{streams}
 
 Our guiding design principle is duality. This principle is reflected in
 the design of the streaming library: we will not only have a type for
@@ -1387,14 +1386,14 @@ In sum, we can classify streams according to polarity:
 
 We then have three situations when composing stream processors:
 
-1. Matching polarities. In this case behavior is synchronous; no
-concurrency appears.
+1. Matching polarities (one pull, one push). In this case behavior is
+synchronous; no concurrency appears.
 
-2. Two pull. In this case an explicit loop must process the
+2. Two pull streams. In this case an explicit loop must process the
 streams.  If effects commute, the programmer may run effects out of
 order, potentially concurrently.
 
-3. Two push. In this case the streams must run in independent
+3. Two push streams. In this case the streams must run in independent
 threads, and the programmer needs to make a choice for the communication
 buffer. One needs to be careful: if the buffer is to small a deadlock
 may occur.
