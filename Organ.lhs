@@ -1,5 +1,5 @@
 ---
-title: Push Streams, Pull Streams
+title: On the Duality of Streams
 subtitle: How Can Linear Types Help to Solve the Lazy IO Problem?
 ...
 
@@ -9,6 +9,7 @@ Possible titles:
 
 - A Linear approach to streaming
 - Push and Pull Streams
+- On the Duality of Streams
 
 > {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms, BangPatterns, TypeSynonymInstances, FlexibleInstances  #-}
 > module Organ where
@@ -145,12 +146,6 @@ h = g . f
 
 Second, closing of resources is reliable, even in the presence of
 exceptions. Printing a file can thus implemented as follows:
-
- <!--
-
-TODO: leftover stdOut sink?
-
- -->
 
 > main = fileSrc "foo" `fwd` stdoutSnk
 
@@ -1964,6 +1959,8 @@ NOTE: commutative monads is SPJ Open Challenge #2 in his 2009 Talk "Wearing the 
 >    shiftSrc xs' $ \sna ->
 >    reverted sa sna)
 >   x' x
+
+> type a ⅋ b = N a -> N b -> Eff
 
 
 --  LocalWords:  forkIO readChan writeChan newChan Applicative IORef
