@@ -130,9 +130,9 @@ Kiselyov's *iteratees* (\citeyear{kiselyov_iteratees_2012}) already
 solves the issues described above, our grounding in linear logic
 allows us to support more stream programs, as we discuss below.
 
-We introduce two types, \var{Src} and \var{Snk}, for solving the two
-problems above. These two types denote streams that
-produce and consume elements respectively. Composing functions
+We introduce two types of streams, \var{Src} for producing elements
+and \var{Snk} for consuming elements. These types help tackling the
+first problem above using the following guarantee: composing functions
 on such streams is guaranteed not to allocate more memory than the sum
 of its components. Translating the first code example above would
 look as follows:
@@ -146,11 +146,16 @@ h = g . f
 Second, closing of resources is reliable, even in the presence of
 exceptions. Printing a file can thus implemented as follows:
 
+ <!--
+
 TODO: leftover stdOut sink?
+
+ -->
 
 > main = fileSrc "foo" `fwd` stdoutSnk
 
-where the various library functions have the following types:
+where \var{fwd} forwards data from a source to a sink.
+The various library functions have the following types:
 
 \begin{spec}
 stdoutSnk :: Snk String
@@ -158,19 +163,18 @@ fileSrc :: FilePath -> Src String
 fwd :: Src a -> Snk a -> IO ()
 \end{spec}
 
-The type \var{Snk} stands for a data sink, and \var{fwd} forwards data
-from a source to a sink.  The above type signatures reveal a first
-improvement of our approach over Kiselyov's: we natively support both
-sources and sinks. In itself this may appear to be a superficial
-advantage.  However, duality is fundamental in our work: the existence
-of both sources and sinks is based on support for two kinds of
-streams: pull streams and push streams, while Kiselyov's iteratees are
-heavily geared towards pull streams. Push streams control the flow of
-computation, while pull stream respond to it. We support in particular
-data sources with push-flavour, called co-sources.  This is useful for
-example when a source needs precise control over the execution of
-effects it embeds (sec Sec. \ref{async}). For example, sources cannot
-be unzipped, but co-sources can.
+Supporting both sources and sinks may appear to be a superficial
+advantage, compare to the approach of Kiselyov. However, duality is
+fundamental in our work: the existence of both sources and sinks is
+based on support for streams with two kinds of polarities: pull streams
+and push streams, while Kiselyov's iteratees are heavily geared
+towards pull streams. Push streams control the flow of computation,
+while pull stream respond to it. The type \var{Snk} pushes while
+\var{Src} pull. However, we also support in particular data sources
+with push-flavour, called co-sources.  This is useful for example when
+a source needs precise control over the execution of effects it embeds
+(sec Sec. \ref{async}). For example, sources cannot be unzipped, but
+co-sources can.
 
 In a program which uses both sources and co-sources, the need might
 arise to compose a function producing a co-source with a program
