@@ -658,58 +658,7 @@ Not sure if these are true or what
 
  -->
 
-
-
-The above laws can be proved by mutual induction with the associative
-laws of the monoids. Let us show only the case for sources, the case
-for sinks being similar.
-
-The \var{Full} case relies on the monoidal structure of effects:
-
-\begin{spec}
-   ((s1 <> s2) <> s3) Full
-==  -- by def
-   (s1 <> s2) Full <> s3 Full
-==  -- by def
-   (s1 Full <> s2 Full) <> s3 Full
-==  -- \var{Eff} is a monoid
-   s1 Full <> (s2 Full <> s3 Full)
-==  -- by def
-   s1 Full <> (s2 <> s3) Full
-==  -- by def
-   (s1 <> (s2 <> s3)) Full
-\end{spec}
-
-The \var{Cont} case uses mutual induction:
-
-\begin{spec}
-  ((s1 <> s2) <> s3) (Cont k)
-== -- by def
-  (s1 <> s2) (Cont (k -? s3)
-== -- by def
-  s1 (Cont (k -? s3) -? s2)
-== -- mutual IH
-  s1 (Cont (k -? (s2 <> s3)))
-== -- by def
-  (s1 <> (s2 <> s3)) (Cont k)
-\end{spec}
-
-The \var{Cons} case uses mutual induction:
-
-\begin{spec}
-  ((k -? s2) -? s1) (Cons a s0)
-== -- by def
-  (k -? s2) (Cons a (s0 <> s1))
-== -- by def
-  k (Cons a ((s0 <> s1) <> s2))
-== -- mutual IH
-  k (Cons a (s0 <> (s1 <> s2))
-== -- def
-  (k -? (s1 <> s2)) (Cons a s0)
-\end{spec}
-
-(We omit the \var{Nil} case; it is similar to the \var{Full} case)
-
+The proofs for the above laws can be found in Appendix \ref{proof}.
 
 \paragraph{Functor}
 We have already seen the mapping functions for sources and sinks:
@@ -1722,11 +1671,10 @@ mismatch.
 
 \acks
 
-We gratefully thank Atze van der Ploeg and Nicolas Pouillard for
-feedback on drafts of this paper.
-The source code for this paper is a literate Haskell file, available
-at this url: TODO. The paper is typeset using pandoc, lhs2TeX and
-latex.
+We gratefully thank Koen Claessen, Atze van der Ploeg and Nicolas
+Pouillard for feedback on drafts of this paper.  The source code for
+this paper is a literate Haskell file, available at this url:
+TODO. The paper is typeset using pandoc, lhs2TeX and latex.
 
 
 
@@ -1897,6 +1845,61 @@ Proof of associativity of append for sinks
 == -- by def
   (t1 -! (t2 -! s)) (Cont t0)
 \end{spec}
+
+Proof of difference laws
+========================
+
+\label{proof}
+
+The laws can be proved by mutual induction with the associative
+laws of the monoids. Let us show only the case for sources, the case
+for sinks being similar.
+
+The \var{Full} case relies on the monoidal structure of effects:
+
+\begin{spec}
+   ((s1 <> s2) <> s3) Full
+==  -- by def
+   (s1 <> s2) Full <> s3 Full
+==  -- by def
+   (s1 Full <> s2 Full) <> s3 Full
+==  -- \var{Eff} is a monoid
+   s1 Full <> (s2 Full <> s3 Full)
+==  -- by def
+   s1 Full <> (s2 <> s3) Full
+==  -- by def
+   (s1 <> (s2 <> s3)) Full
+\end{spec}
+
+The \var{Cont} case uses mutual induction:
+
+\begin{spec}
+  ((s1 <> s2) <> s3) (Cont k)
+== -- by def
+  (s1 <> s2) (Cont (k -? s3)
+== -- by def
+  s1 (Cont (k -? s3) -? s2)
+== -- mutual IH
+  s1 (Cont (k -? (s2 <> s3)))
+== -- by def
+  (s1 <> (s2 <> s3)) (Cont k)
+\end{spec}
+
+The \var{Cons} case uses mutual induction:
+
+\begin{spec}
+  ((k -? s2) -? s1) (Cons a s0)
+== -- by def
+  (k -? s2) (Cons a (s0 <> s1))
+== -- by def
+  k (Cons a ((s0 <> s1) <> s2))
+== -- mutual IH
+  k (Cons a (s0 <> (s1 <> s2))
+== -- def
+  (k -? (s1 <> s2)) (Cons a s0)
+\end{spec}
+
+(We omit the \var{Nil} case; it is similar to the \var{Full} case)
 
   <!--
 
