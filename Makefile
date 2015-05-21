@@ -16,3 +16,7 @@ clean:
 	pdflatex $*
 	bibtex $*
 	pdflatex $*
+
+gist:
+	cp Organ.lhs ../fadd6e8a2a0aa98ae94d
+	(cd ../fadd6e8a2a0aa98ae94d && git commit -a -m "sync" && git push)

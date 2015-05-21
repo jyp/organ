@@ -579,7 +579,9 @@ Algebraic structure
 -------------------
 
 Sources and sinks are instances of several common algebraic
-structures, yielding a rich API to program using them.
+structures, yielding a rich API to program using them. This subsection
+and the next may be skipped on first reading, to jump to
+Sec. \ref{effectful-streams}.
 
 \paragraph{Monoid} Source and sinks form a monoid under concatenation:
 
@@ -1663,8 +1665,12 @@ mismatch.
 
 We gratefully thank Koen Claessen, Atze van der Ploeg and Nicolas
 Pouillard for feedback on drafts of this paper.  The source code for
-this paper is a literate Haskell file, available at this url:
-TODO. The paper is typeset using pandoc, lhs2TeX and latex.
+this paper is a literate Haskell file, while latest version is
+available at this url:
+https://gist.github.com/jyp/fadd6e8a2a0aa98ae94d
+
+The paper is typeset
+using pandoc, lhs2TeX and latex.
 
 
 
