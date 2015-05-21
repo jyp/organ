@@ -46,7 +46,12 @@ $if(subtitle)$
 \subtitle{$subtitle$}
 $endif$
 
-\authorinfo{Jean-Philippe Bernardy\and Josef Svenningsson}
+\authorinfo{%
+$for(author)$
+$author.name$ %
+\and %
+$endfor$
+}
            {Chalmers University of Technology and University of Gothenburg}
            {bernardy,josefs at chalmers.se}
 

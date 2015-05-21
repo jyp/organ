@@ -1,6 +1,9 @@
 ---
 title: On the Duality of Streams
 subtitle: How Can Linear Types Help to Solve the Lazy IO Problem?
+author:
+- name: Jean-Philippe Bernardy
+- name: Josef Svenningsson
 ...
 
  <!--
