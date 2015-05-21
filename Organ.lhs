@@ -1672,7 +1672,8 @@ TODO. The paper is typeset using pandoc, lhs2TeX and latex.
 Table of Functions: implementations
 ===================================
 
-> zipSrc s1 s2 t3 = shiftSrc s2 $ \s -> unshiftSrc (\t -> forkSnk t s1 s) t3
+> zipSrc s1 s2 t3 = shiftSrc s2 $ \s ->
+>                   unshiftSrc (\t -> forkSnk t s1 s) t3
 
 > forkSnk sab ta tb =
 >   shiftSrc ta $ \ta' ->
