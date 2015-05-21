@@ -161,7 +161,7 @@ to consume data. This is an instance of the push/pull duality.  In
 general, push-streams control the flow of computation, while
 pull-streams respond to it. We will see that this polarization does
 not need to match the flow of data. We support in particular data
-sources with push-flavour, called co-sources (\var{CoSrc}).
+sources with push-flavor, called co-sources (\var{CoSrc}).
 Co-sources are useful for example when a data stream needs precise
 control over the execution of effects it embeds (sec
 Sec. \ref{async}). For example, sources cannot be demultiplexed, but
@@ -1925,6 +1925,10 @@ The \var{Cons} case uses mutual induction:
 --  LocalWords:  acks url pandoc lhs bibliographystyle abbrvnat bs nb
 --  LocalWords:  PaperTools lastSrc foldr Kiselov's natively runtime
 --  LocalWords:  async algorithmically tmpFile gonzalez snoyman kmett
---  LocalWords:  Atze der Ploeg enumFromToSrc
+--  LocalWords:  Atze der Ploeg enumFromToSrc ScopedTypeVariables acc
+--  LocalWords:  TypeOperators RankNTypes LiberalTypeSynonyms reify
+--  LocalWords:  BangPatterns TypeSynonymInstances FlexibleInstances
+--  LocalWords:  pipelining noindent demultiplexed nnIntro nnElim
+--  LocalWords:  ankner edsl axelsson toListSnk
 
 -->
