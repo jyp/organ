@@ -485,21 +485,21 @@ remove them inside type constructor. For sources and sinks, one proceeds
 as follows. Introduction of double negation in sources and its elimination
 in sinks is a special case of mapping.
 
-> dnintro :: Src a -> Src (NN a)
-> dnintro = mapSrc shift
+> nnIntro :: Src a -> Src (NN a)
+> nnIntro = mapSrc shift
 
-> dndel' :: Snk (NN a) -> Snk a
-> dndel' = mapSnk shift
+> nnElim' :: Snk (NN a) -> Snk a
+> nnElim' = mapSnk shift
 
 The duals are easily implemented by case analysis, following the mutual
 recursion pattern introduced above.
 
-> dndel :: Src (NN a) -> Src a
-> dnintro' :: Snk a -> Snk (NN a)
+> nnElim :: Src (NN a) -> Src a
+> nnIntro' :: Snk a -> Snk (NN a)
 
-> dndel = flipSnk dnintro'
-> dnintro' k Nil = k Nil
-> dnintro' k (Cons x xs) = x $ \x' -> k (Cons x' $ dndel xs)
+> nnElim = flipSnk nnIntro'
+> nnIntro' k Nil = k Nil
+> nnIntro' k (Cons x xs) = x $ \x' -> k (Cons x' $ nnElim xs)
 
 
 Effect-Free Streams
@@ -1153,7 +1153,7 @@ Implementing multiplexing on co-sources is then straightforward, by
 leveraging \var{dmux'}:
 
 > mux' :: CoSrc a -> CoSrc b -> CoSrc (a & b)
-> mux' sa sb = unshiftSnk $ \tab -> dmux' (dndel tab) sa sb
+> mux' sa sb = unshiftSnk $ \tab -> dmux' (nnElim tab) sa sb
 
 
 We use the rest of the section to study the property of co-sources and
@@ -1368,7 +1368,7 @@ All the above buffering operations work on sources, but they can be generically
 inverted to work on sinks, as follows.
 
 > flipBuffer :: (forall a. CoSrc a -> Src a) -> Snk b -> CoSnk b
-> flipBuffer f s = f (dnintro' s)
+> flipBuffer f s = f (nnIntro' s)
 
 
 Summary
