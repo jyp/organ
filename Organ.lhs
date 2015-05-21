@@ -285,7 +285,6 @@ structure is a mere diversion.
 
 Streams
 =======
-\label{streams}
 
 Our guiding design principle is duality. This principle is reflected in
 the design of the streaming library: we will not only have a type for
