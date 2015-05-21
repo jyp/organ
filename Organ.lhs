@@ -1376,26 +1376,26 @@ Summary
 
 In sum, we can classify streams according to polarity:
 
-- Positive: source and co-sinks
-- Negative: sinks and co-sources
+- Pull: source and co-sinks
+- Push: sinks and co-sources
 
 We then have three situations when composing stream processors:
 
 1. Matching polarities. In this case behavior is synchronous; no
 concurrency appears.
 
-2. Two positives. In this case an explicit loop must process the
+2. Two pull. In this case an explicit loop must process the
 streams.  If effects commute, the programmer may run effects out of
 order, potentially concurrently.
 
-3. Two negatives. In this case the streams must run in independent
+3. Two push. In this case the streams must run in independent
 threads, and the programmer needs to make a choice for the communication
 buffer. One needs to be careful: if the buffer is to small a deadlock
 may occur.
 
-Therefore, when programming with streams, one should consume negative
-types when one can, and positive ones when one must. Conversely, one
-should produce positive types when one can, and negative ones when one
+Therefore, when programming with streams, one should consume push
+types when one can, and pull ones when one must. Conversely, one
+should produce pull types when one can, and push ones when one
 must.
 
 App: idealized echo server
@@ -1462,8 +1462,8 @@ Polarities, data structures and control
 ---------------------------------------
 
 One of keys ideas formalized in this paper is to classify streams by
-polarity. The negative polarity (Sinks, CoSrc) controls the execution
-thread, whereas the positive one (Sources, Co-sinks) provide
+polarity. The push polarity (Sinks, CoSrc) controls the execution
+thread, whereas the pull one (Sources, Co-sinks) provide
 data. This idea has recently been taken advantage of to
 bring efficient array programming facilities to functional programming
 \citep{bernardy_composable_2015,claessen2012expressive,ankner_edsl_2013}.
