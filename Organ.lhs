@@ -130,12 +130,12 @@ Kiselyov's *iteratees* (\citeyear{kiselyov_iteratees_2012}) already
 solves the issues described above, our grounding in linear logic
 allows us to support more stream programs, as we discuss below.
 
-How does our approach fare on the issues identified above? It shares
-the good properties of Kiselyov's solutions. First, the composition of
-two stream processors is guaranteed not to allocate more memory than
-the sum of its components. The composition of stream processors
-typically looks as follows, where \var{Src} is the type former for
-data sources.
+We introduce two types, \var{Src} and \var{Snk}, for solving the two
+problems above. These two types denote streams that
+produce and consume elements respectively. Composing functions
+on such streams is guaranteed not to allocate more memory than the sum
+of its components. Translating the first code example above would
+look as follows:
 
 \begin{spec}
 f :: Src a -> Src b
@@ -278,6 +278,7 @@ structure is a mere diversion.
 
 Streams
 =======
+\label{streams}
 
 Our guiding design principle is duality. This principle is reflected in
 the design of the streaming library: we will not only have a type for
@@ -475,7 +476,7 @@ source, and the recursive case conveniently calls \var{mapSrc}.
 
 
 When using double negations, it is sometimes useful to insert or
-remove them inside type formers. For sources and sinks, one proceeds
+remove them inside type constructor. For sources and sinks, one proceeds
 as follows. Introduction of double negation in sources and its elimination
 in sinks is a special case of mapping.
 
@@ -637,58 +638,7 @@ Not sure if these are true or what
 
  -->
 
-
-
-The above laws can be proved by mutual induction with the associative
-laws of the monoids. Let us show only the case for sources, the case
-for sinks being similar.
-
-The \var{Full} case relies on the monoidal structure of effects:
-
-\begin{spec}
-   ((s1 <> s2) <> s3) Full
-==  -- by def
-   (s1 <> s2) Full <> s3 Full
-==  -- by def
-   (s1 Full <> s2 Full) <> s3 Full
-==  -- \var{Eff} is a monoid
-   s1 Full <> (s2 Full <> s3 Full)
-==  -- by def
-   s1 Full <> (s2 <> s3) Full
-==  -- by def
-   (s1 <> (s2 <> s3)) Full
-\end{spec}
-
-The \var{Cont} case uses mutual induction:
-
-\begin{spec}
-  ((s1 <> s2) <> s3) (Cont k)
-== -- by def
-  (s1 <> s2) (Cont (k -? s3)
-== -- by def
-  s1 (Cont (k -? s3) -? s2)
-== -- mutual IH
-  s1 (Cont (k -? (s2 <> s3)))
-== -- by def
-  (s1 <> (s2 <> s3)) (Cont k)
-\end{spec}
-
-The \var{Cons} case uses mutual induction:
-
-\begin{spec}
-  ((k -? s2) -? s1) (Cons a s0)
-== -- by def
-  (k -? s2) (Cons a (s0 <> s1))
-== -- by def
-  k (Cons a ((s0 <> s1) <> s2))
-== -- mutual IH
-  k (Cons a (s0 <> (s1 <> s2))
-== -- def
-  (k -? (s1 <> s2)) (Cons a s0)
-\end{spec}
-
-(We omit the \var{Nil} case; it is similar to the \var{Full} case)
-
+The proofs for the above laws can be found in Appendix \ref{proof}.
 
 \paragraph{Functor}
 We have already seen the mapping functions for sources and sinks:
@@ -723,6 +673,8 @@ in \var{concatAux}.
 
 (The monad laws can be proved by mutual induction, using a pattern
 similar to the monoid laws.)
+
+\paragraph{Comonad?}
 
 Given the duality between sources and sinks, and the fact that sources
 are monads, it might be tempting to draw the conclusion that sinks are
@@ -768,7 +720,7 @@ instance Contravariant Snk where
 If sinks are not comonads, are there some other structures that they
 implement? The package contravariant on hackage gives two classes;
 \var{Divisible} and \var{Decidable}, which are subclasses of
-\var{Contravariant}, a class for contravariant functors. They are
+\var{Contravariant}, a class for contravariant functors \citep{kmett_contravariant}. They are
 defined as follows:
 
 > class Contravariant f => Divisible f where
@@ -818,7 +770,6 @@ instance Decidable Snk where
   lose f Nil = return ()
   lose f (Cons a ss) = ss (Cont (lose f))
 \end{spec}
-
 
 Table of effect-free functions
 ------------------------------
@@ -889,9 +840,6 @@ the second argument sink.
 Filter a source, and the dual.
 
 > filterSrc :: (a -> Bool) -> Src a -> Src a
-
-Dual to \var{filterSrc}
-
 > filterSnk :: (a -> Bool) -> Snk a -> Snk a
 
 Turn a source of chunks of data into a single source; and the dual.
@@ -924,7 +872,7 @@ A parser is producing the double negation of $a$:
 
 > newtype Parser s a = P (forall res. (a -> P s res) -> P s res)
 
-The monadic interface can then be built using shift and unshift:
+The monadic interface can then be built in the standard way:
 
 > instance Monad (Parser s) where
 >   return x  = P $ \fut -> fut x
@@ -1221,8 +1169,7 @@ co-sinks.
 > mapCoSnk :: (b -> a) -> CoSnk a -> CoSnk b
 > mapCoSnk f = mapSrc (\b' -> \a -> b' (f a))
 
-
-One access elements of a co-source only "one at a time". That is, one
+Elements of a co-source are access only "one at a time". That is, one
 cannot extract the contents of a co-source as a list. Attempting to
 implement this extraction looks as follows.
 
@@ -1346,8 +1293,8 @@ advantage of to run effects concurrently, as follows:
 >    shiftSrc xs' $ \sna ->
 >    concurrently sa sna)
 
-The above strategy is useful if one expects production or consumption
-of elements to be expensive and distributable over computation units.
+The above strategy is useful if the production or consumption
+of elements is expensive and distributable over computation units.
 While the above implementation naively spawns a thread for every
 element, in reality one will most likely want to divide the stream
 into chunks before spawning threads. Because strategies are separate
@@ -1580,7 +1527,7 @@ make heavy use of the following types:
 > type Enumeratee elo eli m a =
 >         I eli m a -> I elo m (I eli m a)
 
-As far as we understand these types make up for the lack of explicit
+It is our understanding that these types make up for the lack of explicit
 sources by putting iteratees (sinks) on the left-hand-side of an
 arrow. Enumerators are advantageously replaced by sources, and
 enumeratees by simple functions from source to source (or sink to
@@ -1622,11 +1569,11 @@ foundation for them is needed, and we hope that the present paper
 provides a basis for such a foundation.
 
 
-FeldSpar monadic streams
+Feldspar monadic streams
 ------------------------
 
 Feldspar, a DSL for digital signal processing, has a notion of streams
-built on monads \citet{svenningsson15:monadic_streams}. In Haskell
+built on monads \citep{axelsson_feldspar_2010,svenningsson15:monadic_streams}. In Haskell
 the stream type can be written as follows:
 
 \begin{spec}
@@ -1711,11 +1658,10 @@ mismatch.
 
 \acks
 
-We gratefully thank Atze van der Ploeg and Nicolas Pouillard for
-feedback on drafts of this paper.
-The source code for this paper is a literate Haskell file, available
-at this url: TODO. The paper is typeset using pandoc, lhs2TeX and
-latex.
+We gratefully thank Koen Claessen, Atze van der Ploeg and Nicolas
+Pouillard for feedback on drafts of this paper.  The source code for
+this paper is a literate Haskell file, available at this url:
+TODO. The paper is typeset using pandoc, lhs2TeX and latex.
 
 
 
@@ -1886,6 +1832,61 @@ Proof of associativity of append for sinks
 == -- by def
   (t1 -! (t2 -! s)) (Cont t0)
 \end{spec}
+
+Proof of difference laws
+========================
+
+\label{proof}
+
+The laws can be proved by mutual induction with the associative
+laws of the monoids. Let us show only the case for sources, the case
+for sinks being similar.
+
+The \var{Full} case relies on the monoidal structure of effects:
+
+\begin{spec}
+   ((s1 <> s2) <> s3) Full
+==  -- by def
+   (s1 <> s2) Full <> s3 Full
+==  -- by def
+   (s1 Full <> s2 Full) <> s3 Full
+==  -- \var{Eff} is a monoid
+   s1 Full <> (s2 Full <> s3 Full)
+==  -- by def
+   s1 Full <> (s2 <> s3) Full
+==  -- by def
+   (s1 <> (s2 <> s3)) Full
+\end{spec}
+
+The \var{Cont} case uses mutual induction:
+
+\begin{spec}
+  ((s1 <> s2) <> s3) (Cont k)
+== -- by def
+  (s1 <> s2) (Cont (k -? s3)
+== -- by def
+  s1 (Cont (k -? s3) -? s2)
+== -- mutual IH
+  s1 (Cont (k -? (s2 <> s3)))
+== -- by def
+  (s1 <> (s2 <> s3)) (Cont k)
+\end{spec}
+
+The \var{Cons} case uses mutual induction:
+
+\begin{spec}
+  ((k -? s2) -? s1) (Cons a s0)
+== -- by def
+  (k -? s2) (Cons a (s0 <> s1))
+== -- by def
+  k (Cons a ((s0 <> s1) <> s2))
+== -- mutual IH
+  k (Cons a (s0 <> (s1 <> s2))
+== -- def
+  (k -? (s1 <> s2)) (Cons a s0)
+\end{spec}
+
+(We omit the \var{Nil} case; it is similar to the \var{Full} case)
 
   <!--
 
