@@ -60,11 +60,9 @@ Unfortunately, lazy evaluation suffers from two drawbacks.  First, it
 has unpredictable memory behavior. Consider the following function
 composition:
 
-\begin{spec}
-f :: [a] -> [b]
-g :: [b] -> [c]
-h = g . f
-\end{spec}
+< f :: [a] -> [b]
+< g :: [b] -> [c]
+< h = g . f
 
 \noindent One hopes that, at run-time, the intermediate list ($[b]$)
 will only be allocated element-wise, as outlined above. Unfortunately,
@@ -86,17 +84,15 @@ Stack Overflow question, accessible at this URL:
 http://stackoverflow.com/questions/296792/haskell-io-and-closing-files
 } that both following programs have the same behavior:
 
-\begin{spec}
-main = do  inFile <- openFile "foo" ReadMode
-           contents <- hGetContents inFile
-           putStr contents
-           hClose inFile
-
-main = do  inFile <- openFile "foo" ReadMode
-           contents <- hGetContents inFile
-           hClose inFile
-           putStr contents
-\end{spec}
+< main = do  inFile <- openFile "foo" ReadMode
+<            contents <- hGetContents inFile
+<            putStr contents
+<            hClose inFile
+< 
+< main = do  inFile <- openFile "foo" ReadMode
+<            contents <- hGetContents inFile
+<            hClose inFile
+<            putStr contents
 
 \noindent Indeed, the \var{putStr} and \var{hClose} commands act on unrelated
 resources, and thus swapping them should have no observable effect.
@@ -127,19 +123,15 @@ use sources would look as follows, and give the guarantee that the
 composition does not allocate more memory than the sum of its
 components.
 
-\begin{spec}
-f :: Src a -> Src b
-g :: Src b -> Src c
-h = g . f
-\end{spec}
+< f :: Src a -> Src b
+< g :: Src b -> Src c
+< h = g . f
 
 Second, the type driving the consumption of elements is called a sink
 (\var{Snk}).  For example, the standard output is naturally given a
 sink type:
 
-\begin{spec}
-stdoutSnk :: Snk String
-\end{spec}
+< stdoutSnk :: Snk String
 
 Using it, we can implement the printing of a file as follows, and
 guarantee the timely release of resources, even in the presence of
@@ -151,10 +143,8 @@ In the above \var{fileSrc} provides the contents of a file, and
 \var{fwd} forwards data from a source to a sink.  The types are as
 follows:
 
-\begin{spec}
-fileSrc :: FilePath -> Src String
-fwd :: Src a -> Snk a -> IO ()
-\end{spec}
+< fileSrc :: FilePath -> Src String
+< fwd :: Src a -> Snk a -> IO ()
 
 Sources provide data on-demand, while sinks decide when they are ready
 to consume data. This is an instance of the push/pull duality.  In
@@ -174,11 +164,9 @@ programs would silently cause memory allocation. In our approach, this
 mismatch is caught by the type system, and the user must explicitly
 conjure a buffer to be able to write the composition:
 
-\begin{spec}
-f :: Src a -> CoSrc b
-g :: Src b -> Src c
-h = g . buffer . f
-\end{spec}
+< f :: Src a -> CoSrc b
+< g :: Src b -> Src c
+< h = g . buffer . f
 
 The contributions of this paper are
 
@@ -281,23 +269,19 @@ sources of data but also a type for sinks. For example, a simple
 stream processor reading from a single source and writing to a single
 sink will be given the following type:
 
-\begin{spec}
-simple :: Src a -> Snk a -> Eff
-\end{spec}
+< simple :: Src a -> Snk a -> Eff
 
 We will make sure that \var{Snk} is the negation of a source (and vice
 versa), and thus the type of the above program may equivalently have
 been written as follows:
 
-\begin{spec}
-simple :: Src a -> Src a
-\end{spec}
+< simple :: Src a -> Src a
 
 However, having explicit access to sinks allows us to (for example)
 dispatch a single source to multiple sinks, as in the following type signature:
-\begin{spec}
-forkSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
-\end{spec}
+
+< forkSrc :: Src (a,b) -> Snk a -> Snk b -> Eff
+
 Familiarity with duality will be crucial in the later sections of this paper.
 
 We define sources and sinks by mutual recursion. Producing a
@@ -623,10 +607,8 @@ convenient to give them the following aliases:
 Appending and differences interact in the expected way: the following
 equalities hold.
 
-\begin{spec}
-t -? (s1 <> s2) == t -? s2 -? s1
-(t1 <> t2) -! s == t1 -! t2 -! s
-\end{spec}
+< t -? (s1 <> s2) == t -? s2 -? s1
+< (t1 <> t2) -! s == t1 -! t2 -! s
 
  <!--
 
@@ -681,9 +663,7 @@ comonads. This is not the case. To see why, consider that every
 comonad has a counit, which, in the case for sinks, would have the
 following type
 
-\begin{spec}
-Snk a -> a
-\end{spec}
+< Snk a -> a
 
 There is no way to implement this function since sinks do not store
 elements so that they can be returned. Sinks consume elements rather
@@ -699,10 +679,8 @@ than producing them.
 >   contramap :: (b -> a) -> f a -> f b
 
 
-\begin{spec}
-instance Contravariant Snk where
-  contramap = mapSnk
-\end{spec}
+< instance Contravariant Snk where
+<   contramap = mapSnk
 
 
 > sinkToSnk :: Sink a -> Snk a
@@ -725,18 +703,16 @@ defined as follows:
 The method \var{divide} can be seen as a dual of \var{zipWith} where
 elements are split and fed to two different sinks.
 
-\begin{spec}
-instance Divisible Snk where
-  divide div snk1 snk2 Nil = snk1 Nil <> snk2 Nil
-  divide div snk1 snk2 (Cons a ss) =
-    snk1 (Cons b $ \ss1 ->
-    snk2 (Cons c $ \ss2 ->
-    shiftSnk (divide div (sinkToSnk ss1)
-                         (sinkToSnk ss2)) ss))
-    where (b,c) = div a
-
-  conquer = plug
-\end{spec}
+< instance Divisible Snk where
+<   divide div snk1 snk2 Nil = snk1 Nil <> snk2 Nil
+<   divide div snk1 snk2 (Cons a ss) =
+<     snk1 (Cons b $ \ss1 ->
+<     snk2 (Cons c $ \ss2 ->
+<     shiftSnk (divide div (sinkToSnk ss1)
+<                          (sinkToSnk ss2)) ss))
+<     where (b,c) = div a
+< 
+<   conquer = plug
 
 By using \var{divide} it is possible to split data and feed it to several
 sinks. Producing and consuming elements still happens in lock-step;
@@ -752,19 +728,17 @@ The class \var{Decidable} has the methods \var{lose} and \var{choose}:
 The function \var{choose} can split up a sink so that some elements
 go to one sink and some go to another.
 
-\begin{spec}
-instance Decidable Snk where
-  choose choice snk1 snk2 Nil = snk1 Nil <> snk2 Nil
-  choose choice snk1 snk2 (Cons a ss)
-    | Left b <- choice a = snk1 (Cons b $ \snk1' ->
-      shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
-  choose choice snk1 snk2 (Cons a ss)
-    | Right c <- choice a = snk2 (Cons c $ \snk2' ->
-      shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
-
-  lose f Nil = return ()
-  lose f (Cons a ss) = ss (Cont (lose f))
-\end{spec}
+< instance Decidable Snk where
+<   choose choice snk1 snk2 Nil = snk1 Nil <> snk2 Nil
+<   choose choice snk1 snk2 (Cons a ss)
+<     | Left b <- choice a = snk1 (Cons b $ \snk1' ->
+<       shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
+<   choose choice snk1 snk2 (Cons a ss)
+<     | Right c <- choice a = snk2 (Cons c $ \snk2' ->
+<       shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
+< 
+<   lose f Nil = return ()
+<   lose f (Cons a ss) = ss (Cont (lose f))
 
 Table of effect-free functions
 ------------------------------
@@ -1081,10 +1055,8 @@ However, multiplexing sources cannot be implemented while respecting
 synchronicity. To see why, let us attempt anyway, using the following
 type signature:
 
-\begin{spec}
-mux :: Src a -> Src b -> Src (Either a b)
-mux sa sb = ?
-\end{spec}
+< mux :: Src a -> Src b -> Src (Either a b)
+< mux sa sb = ?
 
 We can try to fill the hole by reading on a source. However, if we do
 this, the choice falls to the multiplexer to choose which source to
@@ -1538,13 +1510,11 @@ of continuations, closer to what we advocate here. Producers and
 consumers (sources and sinks) are defined more simply, using types
 which correspond more directly to negations:
 
-\begin{spec}
-type GenT e m = ReaderT (e -> m ()) m
-type Producer m e = GenT e m ()
-type Consumer m e = e -> m ()
-type Transducer m1 m2 e1 e2 =
-  Producer m1 e1 -> Producer m2 e2
-\end{spec}
+< type GenT e m = ReaderT (e -> m ()) m
+< type Producer m e = GenT e m ()
+< type Consumer m e = e -> m ()
+< type Transducer m1 m2 e1 e2 =
+<   Producer m1 e1 -> Producer m2 e2
 
 Yet, in that work, linearity is still not mentioned, the use of a
 monad rather than monoid persists, and mismatching polarities are not
@@ -1569,9 +1539,7 @@ Feldspar, a DSL for digital signal processing, has a notion of streams
 built on monads \citep{axelsson_feldspar_2010,svenningsson15:monadic_streams}. In Haskell
 the stream type can be written as follows:
 
-\begin{spec}
-type Stream a = IO (IO a)
-\end{spec}
+< type Stream a = IO (IO a)
 
 Intuitively the outer monad can be understood as performing
 initialization which creates the inner monadic computation. The inner
@@ -1592,10 +1560,8 @@ for data transmission. This protocol is readily expressible using
 linear types, following the ideas of \citet{wadler_propositions_2012}
 and \citet{caires_concurrent_2012}:
 
-\begin{spec}
-Source a = 1 ⊕ (a ⊗ N (Sink a))
-Sink a = 1 ⊕ N (Source a)
-\end{spec}
+< Source a = 1 ⊕ (a ⊗ N (Sink a))
+< Sink a = 1 ⊕ N (Source a)
 
 For the translation to Haskell, we have chosen to use a lightweight
 encoding, assuming linearity of effectful variables; arguing at the
@@ -1781,57 +1747,49 @@ Proof of associativity of append for sinks
 
 \var{Nil} case.
 
-\begin{spec}
-    ((t1 <> t2) <> t3) Nil
-== -- by def
-    (t1 <> t2) Nil <> t3 Nil
-== -- by def
-    (t1 Nil <> t2 Nil) <> t3 Nil
-==
-    t1 Nil <> (t2 Nil <> t3 Nil)
-== -- by def
-    t1 Nil <> ((t2 <> t3) Nil)
-== -- by def
-    (t1 <> (t2 <> t3)) Nil
-\end{spec}
+<     ((t1 <> t2) <> t3) Nil
+< == -- by def
+<     (t1 <> t2) Nil <> t3 Nil
+< == -- by def
+<     (t1 Nil <> t2 Nil) <> t3 Nil
+< ==
+<     t1 Nil <> (t2 Nil <> t3 Nil)
+< == -- by def
+<     t1 Nil <> ((t2 <> t3) Nil)
+< == -- by def
+<     (t1 <> (t2 <> t3)) Nil
 
  \var{Cons} case.
 
-\begin{spec}
-    ((t1 <> t2) <> t3) (Cons a s0)
-== -- by def
-    (t1 <> t2) (Cons a (t3 -! s0))
-== -- by def
-    t1 (Cons a (t2 -! (t3 -! s0)))
-== -- by IH
-    t1 (Cons a ((t2 <> t3) -! s0))
-== -- by def
-    (t1 <> (t2 <> t3)) (Cons a s0)
-\end{spec}
+<     ((t1 <> t2) <> t3) (Cons a s0)
+< == -- by def
+<     (t1 <> t2) (Cons a (t3 -! s0))
+< == -- by def
+<     t1 (Cons a (t2 -! (t3 -! s0)))
+< == -- by IH
+<     t1 (Cons a ((t2 <> t3) -! s0))
+< == -- by def
+<     (t1 <> (t2 <> t3)) (Cons a s0)
 
  \var{Full} case.
-\begin{spec}
-  ((t1 <> t2) -! s) Full
-== -- by def
-  s (Cont (t1 <> t2))
-== -- by def
-   (t2 -! s) (Cont t1)
-== -- by def
-  (t1 -! (t2 -! s)) Full
-\end{spec}
+<   ((t1 <> t2) -! s) Full
+< == -- by def
+<   s (Cont (t1 <> t2))
+< == -- by def
+<    (t2 -! s) (Cont t1)
+< == -- by def
+<   (t1 -! (t2 -! s)) Full
 
  \var{Cont} case.
-\begin{spec}
-  ((t1 <> t2) -! s) (Cont t0)
-== -- by def
-  s (Cont (t0 <> (t1 <> t2)))
-== -- by IH
-  s (Cont ((t0 <> t1) <> t2))
-== -- by def
-  (t2 -! s) (Cont (t0 <> t1))
-== -- by def
-  (t1 -! (t2 -! s)) (Cont t0)
-\end{spec}
+<   ((t1 <> t2) -! s) (Cont t0)
+< == -- by def
+<   s (Cont (t0 <> (t1 <> t2)))
+< == -- by IH
+<   s (Cont ((t0 <> t1) <> t2))
+< == -- by def
+<   (t2 -! s) (Cont (t0 <> t1))
+< == -- by def
+<   (t1 -! (t2 -! s)) (Cont t0)
 
 Proof of difference laws
 ========================
@@ -1844,47 +1802,41 @@ for sinks being similar.
 
 The \var{Full} case relies on the monoidal structure of effects:
 
-\begin{spec}
-   ((s1 <> s2) <> s3) Full
-==  -- by def
-   (s1 <> s2) Full <> s3 Full
-==  -- by def
-   (s1 Full <> s2 Full) <> s3 Full
-==  -- \var{Eff} is a monoid
-   s1 Full <> (s2 Full <> s3 Full)
-==  -- by def
-   s1 Full <> (s2 <> s3) Full
-==  -- by def
-   (s1 <> (s2 <> s3)) Full
-\end{spec}
+<    ((s1 <> s2) <> s3) Full
+< ==  -- by def
+<    (s1 <> s2) Full <> s3 Full
+< ==  -- by def
+<    (s1 Full <> s2 Full) <> s3 Full
+< ==  -- \var{Eff} is a monoid
+<    s1 Full <> (s2 Full <> s3 Full)
+< ==  -- by def
+<    s1 Full <> (s2 <> s3) Full
+< ==  -- by def
+<    (s1 <> (s2 <> s3)) Full
 
 The \var{Cont} case uses mutual induction:
 
-\begin{spec}
-  ((s1 <> s2) <> s3) (Cont k)
-== -- by def
-  (s1 <> s2) (Cont (k -? s3)
-== -- by def
-  s1 (Cont (k -? s3) -? s2)
-== -- mutual IH
-  s1 (Cont (k -? (s2 <> s3)))
-== -- by def
-  (s1 <> (s2 <> s3)) (Cont k)
-\end{spec}
+<   ((s1 <> s2) <> s3) (Cont k)
+< == -- by def
+<   (s1 <> s2) (Cont (k -? s3)
+< == -- by def
+<   s1 (Cont (k -? s3) -? s2)
+< == -- mutual IH
+<   s1 (Cont (k -? (s2 <> s3)))
+< == -- by def
+<   (s1 <> (s2 <> s3)) (Cont k)
 
 The \var{Cons} case uses mutual induction:
 
-\begin{spec}
-  ((k -? s2) -? s1) (Cons a s0)
-== -- by def
-  (k -? s2) (Cons a (s0 <> s1))
-== -- by def
-  k (Cons a ((s0 <> s1) <> s2))
-== -- mutual IH
-  k (Cons a (s0 <> (s1 <> s2))
-== -- def
-  (k -? (s1 <> s2)) (Cons a s0)
-\end{spec}
+<   ((k -? s2) -? s1) (Cons a s0)
+< == -- by def
+<   (k -? s2) (Cons a (s0 <> s1))
+< == -- by def
+<   k (Cons a ((s0 <> s1) <> s2))
+< == -- mutual IH
+<   k (Cons a (s0 <> (s1 <> s2))
+< == -- def
+<   (k -? (s1 <> s2)) (Cons a s0)
 
 (We omit the \var{Nil} case; it is similar to the \var{Full} case)
 

@@ -1,16 +1,20 @@
 all: Organ.pdf
 
-CleanTex: CleanTex.hs
-	ghc --make CleanTex
+%.tool: %.hs
+	ghc --make $*
+	mv -f $* $@
 
 clean:
 	rm -f *.aux *.pdf *.log *.blg *.bbl
 
-%.md.lhs: %.lhs template.tex
+%.sp.lhs: %.lhs Spekify.tool
+	./Spekify.tool <$< >$@
+
+%.md.lhs: %.sp.lhs template.tex
 	pandoc --template=template.tex -s -f markdown+lhs -t latex+lhs --tab-stop=2 $< -o $@
 
-%.tex: %.md.lhs CleanTex
-	lhs2TeX < $*.md.lhs | ./CleanTex >$@
+%.tex: %.md.lhs CleanTex.tool
+	lhs2TeX < $*.md.lhs | ./CleanTex.tool >$@
 
 %.pdf: %.tex
 	pdflatex $*
