@@ -189,8 +189,8 @@ outlined above, our library features two concrete novel aspects:
 \paragraph{Outline} The rest of the paper is structured as follows.
 In Sec. \ref{negations}, we recall the notions of continuations in presence of effects.
 In Sec. \ref{streams}, we present our design for streams, and justify it by appealing to linearity principles.
-In Sec. \ref{effect-free}, we give an API to program with streams, and analyze their algebraic structure.
-In Sec. \ref{effectful}, we show how to embed IO into streams.
+In Sec. \ref{effect-free-streams}, we give an API to program with streams, and analyze their algebraic structure.
+In Sec. \ref{effectful-streams}, we show how to embed IO into streams.
 In Sec. \ref{async}, we discuss polarity mismatch.
 Related work and future work are discussed respectively in sections \ref{related-work} and \ref{future-work}.
 We conclude in Sec. \ref{conclusion}.
@@ -336,7 +336,7 @@ $\var{Src}\,(\var{Src}\,a)$, because $\var{Src}\, α$ is already effectful).
 In this paper, the linearity convention is enforced by manual
 inspection. Manual inspection is unreliable, but weather the linearity
 convention is respected can be algorithmically decided. (See
-sec. \ref{future})
+sec. \ref{future-work})
 
 
 Basics
@@ -477,7 +477,6 @@ recursion pattern introduced above.
 
 Effect-Free Streams
 ===================
-\label{effect-free}
 
 The functions seen so far make no use of the fact that \var{Eff} can
 embed IO actions. In fact, a large number of useful functions over
@@ -878,7 +877,6 @@ the stream are closed.
 
 Effectful streams
 =================
-\label{effectful}
 
 So far, we have constructed only effect-free streams. That is, effects
 could be any monoid, and in particular the unit type.  In this
@@ -1570,7 +1568,6 @@ class), which does not require abiding to linearity.
 
 Future Work
 ===========
-\label{future}
 
 As we see it, a natural next step for the present work is to show that
 intermediate sources and sinks can be deforested. As it stands, we
