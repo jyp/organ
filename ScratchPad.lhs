@@ -11,6 +11,20 @@ term1, term2
 
  -->
 
+ <!--
+
+  A bit ugly, and used nowhere.
+
+A non-full sink decides what to do depending on the availability of
+data. We could write the following:
+
+> match :: Eff -> (a -> Snk a) -> Snk a
+> match nil' cons' k = await k nil' cons'
+
+However, calling \var{await} may break linearity, so we will instead use
+\var{match} in the following.
+-->
+
 
 ScratchPad
 ==========
