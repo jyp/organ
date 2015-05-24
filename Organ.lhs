@@ -64,7 +64,7 @@ composition:
 < g :: [b] -> [c]
 < h = g . f
 
-\noindent One hopes that, at run-time, the intermediate list ($[b]$)
+One hopes that, at run-time, the intermediate list ($[b]$)
 will only be allocated element-wise, as outlined above. Unfortunately,
 this desired behavior does not always happen. Indeed, a
 necessary condition is that the production pattern of $f$ matches the
@@ -94,7 +94,7 @@ http://stackoverflow.com/questions/296792/haskell-io-and-closing-files
 <            hClose inFile
 <            putStr contents
 
-\noindent Indeed, the \var{putStr} and \var{hClose} commands act on unrelated
+Indeed, the \var{putStr} and \var{hClose} commands act on unrelated
 resources, and thus swapping them should have no observable effect.
 However, while the first program prints the `foo` file, the second one
 prints nothing.  Indeed, because \var{hGetContents} reads the file
@@ -250,7 +250,7 @@ collapsed to a single one:
 > unshift :: N (NN a) -> N a
 > unshift k x = k (shift x)
 
-\noindent The above two functions are the \var{return} and \var{join} of the
+The above two functions are the \var{return} and \var{join} of the
 double negation monad\footnote{for \var{join}, substitute $N\,a$ for
 $a$}; indeed adding a double negation in the type corresponds to
 sending the return value to its consumer. However, we will not be
@@ -356,7 +356,6 @@ and the remaining source.
 > await Nil eof _ = eof
 > await (Cons x cs) _ k = cs $ Cont $ \xs -> k x xs
 
-\noindent
 However, the above function breaks the linearity invariant, so we will
 refrain to use it as such. The pattern that it defines is still
 useful: it is valid when the second and third argument consume the
@@ -395,7 +394,6 @@ use instead pre-negated versions of sources and sink:
 > type Src   a = N  (Sink a)
 > type Snk   a = N  (Source a)
 
-\noindent
 These definitions have the added advantage to perfect the duality
 between sources and sinks, while not restricting the programs one can
 write.
@@ -407,7 +405,6 @@ Indeed, one can access the underlying structure as follows:
 > onSource  f   s = f   (\t -> forward s t)
 > onSink    f   t = f   (\s -> forward s t)
 
-\noindent
 And, while a negated \var{Sink} cannot be converted to a
 \var{Source}, all the following conversions are implementable:
 
@@ -1880,7 +1877,7 @@ The \var{Cons} case uses mutual induction:
 --  LocalWords:  Atze der Ploeg enumFromToSrc ScopedTypeVariables acc
 --  LocalWords:  TypeOperators RankNTypes LiberalTypeSynonyms reify
 --  LocalWords:  BangPatterns TypeSynonymInstances FlexibleInstances
---  LocalWords:  pipelining noindent demultiplexed nnIntro nnElim
+--  LocalWords:  pipelining demultiplexed nnIntro nnElim
 --  LocalWords:  ankner edsl axelsson toListSnk
 
 -->
