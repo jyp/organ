@@ -8,7 +8,7 @@ author:
 
  <!--
 
-> {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms, BangPatterns, TypeSynonymInstances, FlexibleInstances  #-}
+> {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms, BangPatterns, TypeSynonymInstances, FlexibleInstances, FlexibleContexts  #-}
 > module Organ where
 > import System.IO
 > import Control.Exception
@@ -1864,3 +1864,23 @@ The \var{Cons} case uses mutual induction:
 --  LocalWords:  ankner edsl axelsson toListSnk
 
 -->
+
+> f :: forall a. Src a -> N [a] -> ()
+> f x ret = do toList x ret
+>              return True
+
+> yy :: Src a
+> yy = undefined
+
+> zz :: N [a] -> IO Bool
+> zz ret = f yy ret
+
+-- > f :: forall a. Src a -> () -> IO Bool
+-- > f x () = do _ <- toList x _
+-- >             return True
+
+-- > yy :: Src a
+-- > yy = undefined
+
+-- > zz :: () -> IO Bool
+-- > zz = f yy
