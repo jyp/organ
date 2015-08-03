@@ -12,11 +12,12 @@ author:
 > module Organ where
 > import System.IO
 > import Control.Exception
-> import Control.Concurrent (forkIO, readChan, writeChan, Chan, newChan)
+> import Control.Concurrent (forkIO, readChan, writeChan, Chan, newChan, QSem, newQSem, waitQSem, signalQSem)
 > import Control.Applicative hiding (empty)
 > import Data.IORef
 > import Data.Monoid
 > import Prelude hiding (tail)
+> import Control.Monad (ap)
 
 -->
 
@@ -314,7 +315,7 @@ actions are run until reaching the end of the pipe (either \var{Full}
 or \var{Nil}). In the rest of the section we precisely define the condition
 that programs need to respect in order to safely use our streams.
 
-We first notion that we need to define is that of an effectful type.
+The first notion that we need to define is that of an effectful type.
 A type is deemed effectful iff it mentions \var{Eff} in its
 definition. We say that a variable with an effectful type is itself
 effectful.
@@ -825,6 +826,11 @@ The monadic interface can then be built in the standard way:
 > instance Monad (Parser s) where
 >   return x  = P $ \fut -> fut x
 >   P f >>= k = P (\fut -> f (\a -> let P g = k a in g fut))
+> instance Applicative (Parser s) where
+>   pure = return
+>   (<*>) = ap
+> instance Functor (Parser s) where
+>   fmap = (<$>)
 
 The essential parsing ingredient, choice, rests on the
 ability to weave processes together; picking that which
@@ -962,6 +968,16 @@ reading a line in a file source.
 >          case mx of
 >            Nothing -> c Nil
 >            Just x -> c (Cons x $ hFileSrcSafe h)
+
+> hFileSrcSafe' :: FilePath -> Src String
+> hFileSrcSafe' f snk = do
+>   h <- openFile f ReadMode
+>   mx <- catch  (Just <$> hFileSrcSafe h snk)
+>                       (\(_ :: IOException) -> return Nothing)
+>   case mx of
+>            Nothing -> forward Nil snk
+>            Just x -> return ()
+
 
 Exceptions raised in \var{hIsEOF} should be handled in the same
 way, as well as those raised in a file sink; we leave this simple
@@ -1143,7 +1159,7 @@ co-sinks. The first example shows how to provide a file as a co-source:
 
 
 Compared to \var{fileSrc}, the difference is that this function can
-decide the ordering of effects run a co-sink connected to it. That is,
+decide the ordering of effects ran in a co-sink connected to it. That is,
 the lines (1) and (2) have no data dependency. Therefore they may be
 run in any order. (Blindly doing so is a bad idea though, as the
 \var{Full} action on the sink will be run before all other actions.)
@@ -1289,6 +1305,32 @@ rely on any special feature of the operating system:
 >   c <- newChan
 >   forkIO $ fwd (chanCoSnk c) f
 >   chanSrc c g
+
+
+Note that it is easy to create a bounded buffer, by guarding the
+writes with a semaphore. In general there is no issue with blocking
+reads or writes. The implementation follows.
+
+> chanCoSnk' :: Chan a -> QSem -> CoSnk a
+> chanCoSnk' _ _ Full = return ()
+> chanCoSnk' h s (Cont c) = c (Cons  write
+>                                    (chanCoSnk' h s))
+>  where write x = do  waitQSem s
+>                      writeChan h x
+
+> chanSrc' :: Chan a -> QSem -> Src a
+> chanSrc' _ _ Full = return ()
+> chanSrc' h s (Cont c) = do  x <- readChan h
+>                             signalQSem s
+>                             c (Cons x $ chanSrc' h s)
+
+> boundedChanBuffer :: Int -> CoSrc a -> Src a
+> boundedChanBuffer n f g = do
+>   c <- newChan
+>   s <- newQSem n
+>   forkIO $ fwd (chanCoSnk' c s) f
+>   chanSrc' c s g
+
 
 In certain situations (for example for a stream yielding a status
 whose history does not matter, like mouse positions) one may want to
@@ -1865,15 +1907,15 @@ The \var{Cons} case uses mutual induction:
 
 -->
 
-> f :: forall a. Src a -> N [a] -> ()
-> f x ret = do toList x ret
->              return True
+-- > f :: forall a. Src a -> N [a] -> ()
+-- > f x ret = do toList x ret
+-- >              return True
 
-> yy :: Src a
-> yy = undefined
+-- > yy :: Src a
+-- > yy = undefined
 
-> zz :: N [a] -> IO Bool
-> zz ret = f yy ret
+-- > zz :: N [a] -> IO Bool
+-- > zz ret = f yy ret
 
 -- > f :: forall a. Src a -> () -> IO Bool
 -- > f x () = do _ <- toList x _
