@@ -252,15 +252,21 @@ Structure of Effects
 --------------------
 
 When dealing with purely functional programs, continuations have no
-effects. In this case, one can let \var{Eff} remain abstract, define
-it to be the empty type: $\var{Eff} = \bot$.
+effects. In this case, one can let \var{Eff} remain abstract, or
+define it to be the empty type: $\var{Eff} = \bot$. This is also the
+natural choice when interpreting the original linear logic of
+\citet{girard_linear_1987}.
 
-However, in our case, we will require additional structure.  First, we
-will require \var{Eff} to be a monoid. Its unit (\var{mempty})
-corresponds to termination, while the operator (\var{mappend})
-corresponds to sequential composition of effects.  (This structure is
-standard to interpret the Halt and MIX rules in linear logic
-TODO: \citep{melies_resource_20??})
+The pure logic makes no requirement on effects, but interpretations
+may choose to impose a richer structure on them. Such interpretations
+would then not be complete with respect to the logic --- but they
+would remain sound.
+In our case, we first require \var{Eff} to be a monoid. Its unit
+(\var{mempty}) corresponds to program termination, while the operator
+(\var{mappend}) corresponds to sequential composition of effects.
+(This structure is standard to interpret the \smallcaps{halt} and
+\smallcaps{mix} rules in linear logic
+\citep{bernardy_composable_2015,mellis_resource_2010})
 
 For users of the stream library, \var{Eff} will remain an abstract
 monoid. However in this paper we will develop concrete effectful
@@ -336,10 +342,10 @@ actions are run until reaching the end of the pipe (either \var{Full}
 or \var{Nil}). In the rest of the section we precisely define the condition
 that programs need to respect in order to safely use our streams.
 
-The first notion that we need to define is that of an effectful type.
+The first notion that we need to define is that of an effectful type:
 
 * The type \var{Eff} is effectful
-* A function type is effctful if the co-domain is effectful
+* A function type is effectful if the co-domain is effectful
 * A product type is effectful if any of its operands is effectful
 * A sum type is effectful if any of its operands is effectful
 * A type variable is not effectful
@@ -370,7 +376,7 @@ approached to lift this limitation have been proposed, e.g. by
 
 
 One might think that the above restriction fails to take into account
-captured ennvironments in functions. One can write the following
+captured ennvironments in functions. Indeed, one can write the following
 function, which may be duplicated, but runs linear effects.
 
 > oops :: (() -> Eff) -> IO Bool
@@ -378,8 +384,10 @@ function, which may be duplicated, but runs linear effects.
 >             return True
 
 However, writing such a function requires to know that $\var{Eff} =
-\var{IO} ()$, and is therefore disallowed by Haskell type system in
-user code, where \var{Eff} is kept abstract.
+\var{IO} ()$, and is therefore disallowed by the Haskell type system
+in user code, where \var{Eff} is kept abstract. (The \var{mappend}
+function may combine two effects in one, but not discard or duplicate
+them.)
 
 
 Basics
@@ -898,23 +906,24 @@ reading a line in a file source.
 Exceptions raised in \var{hIsEOF} should be handled in the same
 way. The file sink is responsible for handling its own exceptions so
 there is no need to insert a handler around the invocation of the
-continuation \var{c}.
+continuation \var{c}.  One would probably have a field in both the
+\var{Nil} and \var{Full} constructors indicating the nature of the
+exception encountered, if any, but we will not bother in the proof of
+concept implementation presented in this paper.
 
-Using exception handlers in this fasion will secure the library from
-synchronous exceptions, but asynchronous exceptions require a little
-more machinery. The region library presented in
-\citet{kiselyov2008lightweight} can be used for this purpose, as
-outlined in \citet{kiselyov12:region_iteratees}.
 
-In an industrial-strength implementation, one would probably have a
-field in both the \var{Nil} and \var{Full} constructors indicating the
-nature of the exception encountered, if any, but we will not bother in the
-proof of concept implementation presented in this paper.
+Dealing with exceptions is done once and for all when implementing the
+library of streams. The programmer using the library does not have to
+be concerned with exceptions as they are caught and communicated
+properly under the hood.
 
-Exceptions are only an issue when implementing the library of
-streams. The programmer using the library does not have to be
-concerned with exceptions as they are caught and communicated properly
-under the hood.
+Using exception handlers, as in the above snippet, will secure the
+library from synchronous exceptions arising from accessing the file,
+but not from asynchronous exceptions which may come from other
+sources. Asynchronous exception-safety requires more machinery. The
+region library presented in \citet{kiselyov2008lightweight} can be
+used for this purpose, as outlined in
+\citet{kiselyov12:region_iteratees}.
 
 
 Synchronicity and Asynchronicity
@@ -1412,18 +1421,16 @@ returns an $a$ --- but it uses a monad $m$ rather than a monoid
 \var{Eff} for effects.
 
 The above type contains a continuation in the \var{GetC}
-constructor. Therefore, users can in principle discard and duplicate
-continuations, thereby potentially duplicating or ignoring effects.
-Hence, even though the above type is typically transparent in
-iteratee-based libaries, higher-level interfaces are provided
-to discourage non-linear uses.
+constructor. Therefore, one must be careful about discarding or
+duplicating iteratees. Hence, such libraries typically provide
+higher-level interfaces to discourage non-linear usages.
 
 A first advantage of our approach is the formulation and emphasis on
-the linearity constraint, which is central to correct use of
-effectful continuations. It appears that variants of iteratees (including the
+the linearity constraint, which is central to correct use of effectful
+continuations. It appears that variants of iteratees (including the
 *pipes* library) make the representation abstract, but at the cost of
 a complex interface for programming them. By stating the linearity
-requirement no abstract API is necessary to guarantee safety.
+requirement no complex abstract API is necessary to guarantee safety.
 
 A second advantage of our library is that effects are not required to
 be monads. Indeed, the use of continuations already provide the
@@ -1447,7 +1454,6 @@ arrow. Enumerators are advantageously replaced by sources, and
 enumeratees by simple functions from source to source (or sink to
 sink).
 
-
 A third advantage of our approach is that the need for buffering (or
 the scheduling opportunities) are clearly indicated by the type
 system, as mismatching polarities.
@@ -1468,7 +1474,7 @@ which correspond more directly to negations:
 
 Yet, in that work, linearity is only briefly mentioned; the use of a
 monad rather than monoid persists; and mismatching polarities are not
-discussed.
+discussed, let alone taken advantage of.
 
 Several production-strength libraries have been built upon the concept
 of iteratees, including *pipes* \citep{gonzalez_pipes_2015},
@@ -1567,13 +1573,13 @@ Using effectful continuations is not a new idea; in fact it was the
 standard way of writing effectful programs in Haskell 1.2. Later
 versions of Haskell switched to a monadic approach. However, given the
 issues outlined in the introduction, and especially the error-prone
-character of lazy IO, many libraries have reverted to explicit use of
-co-routines.
+character of lazy monadic IO, many libraries have reverted to explicitly
+using co-routines.
 
 A possible reason for selecting monads over co-routines is that monads
 are rooted in solid theory (categories). However, we hope to have
 shown that co-routines are also rooted in solid theory, namely
-linear-logic. If Haskell had support for linear types, co-routines
+linear logic. If Haskell had support for linear types, co-routines
 could be used safely, without the quirks of lazy IO.
 
 
