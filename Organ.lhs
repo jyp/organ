@@ -115,7 +115,7 @@ the computational behavior of Girard's linear logic
 paper is as an advocacy for linear types support in Haskell. While
 Kiselyov's *iteratees* (\citeyear{kiselyov_iteratees_2012}) already
 solves the issues described above, our grounding in linear logic
-yields a richer language of types for data streams, capturing
+yields a rich structure for types for data streams, capturing
 various production and consumption patterns.
 
 First, the type corresponding to on-demand production of elements is called a
@@ -185,7 +185,7 @@ outlined above, our library features two concrete novel aspects:
     libraries.
 
   2. Support for explicit buffering and control structures, while
-    still respecting compositionality.
+    still respecting compositionality (Sec. \ref{async}).
 
 \paragraph{Outline} The rest of the paper is structured as follows.
 In Sec. \ref{negations}, we recall the notions of continuations in presence of effects.
@@ -203,24 +203,11 @@ Preliminary: negation and continuations
 \label{negations}
 
 In this section we recall the basics of continuation-based
-programming. Readers familiar with continuations only need to read
-this section to pick up our notation.
+programming. We introduce our notation, and justify effectful
+continuations.
 
-We begin by assuming a type of effects \var{Eff}. For users of the
-stream library, this type should remain an abstract monoid. However in
-this paper we will develop concrete effectful streams, and this is
-possible only if we pick a concrete type of effects. Because we will
-provide streams interacting with files and other operating-system
-resources, we must pick $\var{Eff} = \var{IO} ()$, and ensure that
-\var{Eff} can be treated as a monoid.
-
-> type Eff = IO ()
-
-> instance Monoid Eff where
->   mempty = return ()
->   mappend = (>>)
-
-We can then define negation as follows:
+We begin by assuming a type of effects \var{Eff}, which we keep
+abstract for now. We can then define negation as follows:
 
 > type N a = a -> Eff
 
@@ -234,12 +221,14 @@ argument of type $N α$. Dually, consuming an argument of type α is
 equivalent to producing a result of type $N α$. In this paper we call
 these equivalences the duality principle.
 
-In classical logic, negation is involutive; that is:
-$\var{NN}\,α = α$
-However, because we work within Haskell, we
-do not have this equality.  We can come close enough though.
-First, double negations can always be introduced, using the
-\var{shift} operator.
+In classical logic, negation is involutive; that is: $\var{NN}\,α = α$
+However, because we work within Haskell, we do not have this
+equality\footnote{Even though
+\citet{munch-maccagnoni_formulae-as-types_2014} achieves an involutive
+negation in an intuitionistic language, he does so by stack
+manipulation, which is not available in Haskell.}.  We can come close
+enough though.  First, double negations can always be introduced,
+using the \var{shift} operator:
 
 > shift :: a -> NN a
 > shift x k = k x
@@ -259,7 +248,39 @@ using this monadic structure anywhere in the following. Indeed, single
 negations play a central role in our approach, and the monadic
 structure is a mere diversion.
 
+Structure of Effects
+--------------------
 
+When dealing with purely functional programs, continuations have no
+effects. In this case, one can let \var{Eff} remain abstract, define
+it to be the empty type: $\var{Eff} = \bot$.
+
+However, in our case, we will require additional structure.  First, we
+will require \var{Eff} to be a monoid. Its unit (\var{mempty})
+corresponds to termination, while the operator (\var{mappend})
+corresponds to sequential composition of effects.  (This structure is
+standard to interpret the Halt and MIX rules in linear logic
+TODO: \citep{melies_resource_20??})
+
+For users of the stream library, \var{Eff} will remain an abstract
+monoid. However in this paper we will develop concrete effectful
+streams, and therefore we greatly extend the structure of effects. In
+fact, because we will provide streams interacting with files and other
+operating-system resources, and write the whole code in standard
+Haskell, we must pick $\var{Eff} = \var{IO} ()$, and ensure that
+\var{Eff} can be treated as a monoid. 
+
+> type Eff = IO ()
+
+> instance Monoid Eff where
+>   mempty = return ()
+>   mappend = (>>)
+
+The parts of the code which now about $\var{Eff} = \var{IO} ()$ must
+be carefully written. The type system provides no particular
+guarantees about such code. These IO-interacting functions do not
+interpret any standard fragment of linear logic: they are non-standard
+extensions of its model.
 
 Streams
 =======
@@ -316,28 +337,49 @@ or \var{Nil}). In the rest of the section we precisely define the condition
 that programs need to respect in order to safely use our streams.
 
 The first notion that we need to define is that of an effectful type.
-A type is deemed effectful iff it mentions \var{Eff} in its
-definition. We say that a variable with an effectful type is itself
-effectful.
+
+* The type \var{Eff} is effectful
+* A function type is effctful if the co-domain is effectful
+* A product type is effectful if any of its operands is effectful
+* A sum type is effectful if any of its operands is effectful
+* A type variable is not effectful
+
+Further, we say that a variable with an effectful type is itself effectful.
 
 The linearity convention is then respected iff:
 
-1. No effectful variable may be duplicated or shared. In
-particular, if passed as an argument to a function it may not be used
-again.
+1. No effectful variable may be duplicated or shared. In particular,
+if passed as an argument to a function it may not be used again.
 
 2. Every effectful variable must be consumed (or passed to a function, which
 will be in charged of consuming it).
 
-3. A type variable α can be instantiated to an effectful type only if
-it occurs in an effectful type. (For example it is OK to construct
-$\var{Src}\,(\var{Src}\,a)$, because $\var{Src}\, α$ is already effectful).
-
+3. A type variable α can not be instantiated to an effectful type.
 
 In this paper, the linearity convention is enforced by manual
 inspection. Manual inspection is unreliable, but weather the linearity
 convention is respected can be algorithmically decided. (See
 sec. \ref{future-work})
+
+The third restriction (instanciation of type-variables) means that
+effectful types cannot be used in standard polymorphic Haskell
+functions. This is a severe restriction, but it gives enough leeway to
+implement a full-fledged stream library, as we do below. (Yet some
+approached to lift this limitation have been proposed, e.g. by
+\citet{mazurak_lightweight_2010}.)
+
+
+One might think that the above restriction fails to take into account
+captured ennvironments in functions. One can write the following
+function, which may be duplicated, but runs linear effects.
+
+> oops :: (() -> Eff) -> IO Bool
+> oops k = do ignore <- k ()
+>             return True
+
+However, writing such a function requires to know that $\var{Eff} =
+\var{IO} ()$, and is therefore disallowed by Haskell type system in
+user code, where \var{Eff} is kept abstract.
 
 
 Basics
@@ -533,12 +575,7 @@ structure of \var{Eff} in this case.
 Algebraic structure
 -------------------
 
-Sources and sinks are instances of several common algebraic
-structures, yielding a rich API to program using them. This subsection
-and the next may be skipped on first reading, to jump to
-Sec. \ref{effectful-streams}.
-
-\paragraph{Monoid} Source and sinks form a monoid under concatenation:
+Source and sinks form a monoid under concatenation:
 
 > instance Monoid (Src a) where
 >   mappend = appendSrc
@@ -588,7 +625,7 @@ convenient to give them the following aliases:
 > infixl -?
 
 Appending and differences interact in the expected way: the following
-equalities hold.
+observational equalities hold:
 
 < t -? (s1 <> s2) == t -? s2 -? s1
 < (t1 <> t2) -! s == t1 -! t2 -! s
@@ -610,118 +647,7 @@ sources are functors and sinks are contravariant functors. (Given the
 implementation of the morphism actions it is straightforward to check
 the functor laws.)
 
-\paragraph{Monad}
 
-Besides, \var{Src} is a monad. The unit is trivial. The join operation
-is the concatenation of sources:
-
-> concatSrcSrc :: Src (Src a) -> Src a
-
-Concatenation is defined using the two auxiliary functions
-\var{concatSnkSrc} and \var{concatAux}. The function
-\var{concatSnkSrc} transforms a sink such that it no longer just consumes elements, but sequences of elements in the form of sources. All of these sources are to be fed into the
-sink, one after the other. Appending all the sources together happens
-in \var{concatAux}.
-
-> concatSrcSrc = flipSnk concatSnkSrc
-
-> concatSnkSrc :: Snk a -> Snk (Src a)
-> concatSnkSrc snk Nil = snk Nil
-> concatSnkSrc snk (Cons src s)
->   = src (Cont (concatAux snk s))
-
-> concatAux :: Snk a -> Src (Src a) -> Snk a
-> concatAux snk ssrc Nil = snk Nil <> ssrc Full
-> concatAux snk ssrc (Cons a s)
->   = snk (Cons a (appendSrc s (concatSrcSrc ssrc)))
-
-(The monad laws can be proved by mutual induction, using a pattern
-similar to the monoid laws.)
-
-\paragraph{Comonad?}
-
-Given the duality between sources and sinks, and the fact that sources
-are monads, it might be tempting to draw the conclusion that sinks are
-comonads. This is not the case. To see why, consider that every
-comonad has a counit, which, in the case for sinks, would have the
-following type
-
-< Snk a -> a
-
-There is no way to implement this function since sinks do not store
-elements so that they can be returned. Sinks consume elements rather
-than producing them.
-
-\paragraph{Divisible and Decidable}
-
- <!--
-
-> data Void
-
-> class Contravariant f where
->   contramap :: (b -> a) -> f a -> f b
-
-
-< instance Contravariant Snk where
-<   contramap = mapSnk
-
-
-> sinkToSnk :: Sink a -> Snk a
-> sinkToSnk Full Nil = return ()
-> sinkToSnk Full (Cons a n) = n Full
-> sinkToSnk (Cont f) s = f s
-
--->
-
-If sinks are not comonads, are there some other structures that they
-implement? The package contravariant on hackage gives two classes;
-\var{Divisible} and \var{Decidable}, which are subclasses of
-\var{Contravariant}, a class for contravariant functors \citep{kmett_contravariant}. They are
-defined as follows:
-
-> class Contravariant f => Divisible f where
->   divide :: (a -> (b, c)) -> f b -> f c -> f a
->   conquer :: f a
-
-The method \var{divide} can be seen as a dual of \var{zipWith} where
-elements are split and fed to two different sinks.
-
-< instance Divisible Snk where
-<   divide div snk1 snk2 Nil = snk1 Nil <> snk2 Nil
-<   divide div snk1 snk2 (Cons a ss) =
-<     snk1 (Cons b $ \ss1 ->
-<     snk2 (Cons c $ \ss2 ->
-<     shiftSnk (divide div (sinkToSnk ss1)
-<                          (sinkToSnk ss2)) ss))
-<     where (b,c) = div a
-< 
-<   conquer = plug
-
-By using \var{divide} it is possible to split data and feed it to several
-sinks. Producing and consuming elements still happens in lock-step;
-both sinks consume their respective elements before the source gets to
-produce a new element. The \var{conquer} method is a unit for \var{divide}.
-
-The class \var{Decidable} has the methods \var{lose} and \var{choose}:
-
-> class Divisible f => Decidable f where
->   choose :: (a -> Either b c) -> f b -> f c -> f a
->   lose :: (a -> Void) -> f a
-
-The function \var{choose} can split up a sink so that some elements
-go to one sink and some go to another.
-
-< instance Decidable Snk where
-<   choose choice snk1 snk2 Nil = snk1 Nil <> snk2 Nil
-<   choose choice snk1 snk2 (Cons a ss)
-<     | Left b <- choice a = snk1 (Cons b $ \snk1' ->
-<       shiftSnk (choose choice (sinkToSnk snk1') snk2) ss)
-<   choose choice snk1 snk2 (Cons a ss)
-<     | Right c <- choice a = snk2 (Cons c $ \snk2' ->
-<       shiftSnk (choose choice snk1 (sinkToSnk snk2')) ss)
-< 
-<   lose f Nil = return ()
-<   lose f (Cons a ss) = ss (Cont (lose f))
 
 Table of effect-free functions
 ------------------------------
@@ -1444,7 +1370,7 @@ The server can then be defined by composing the above two functions.
 
 Related Work
 ============
-\label{related}
+
 
 
 Polarities, data structures and control
@@ -1477,7 +1403,6 @@ Iteratees
 We consider that the state of the art in Haskell stream processing is
 embodied by Kiselyov's iteratees \citeyear{kiselyov_iteratees_2012}.
 
-
 The type for iteratees can be given the following definitions:
 
 > data I s m a = Done a | GetC (Maybe s -> m (I s m a))
@@ -1486,17 +1411,19 @@ An iteratee $I\,s\,m\,a$ roughly corresponds to a sink of $s$ which also
 returns an $a$ --- but it uses a monad $m$ rather than a monoid
 \var{Eff} for effects.
 
-As far as we understand, the above type is meant to be transparent:
-iteratee users may access the continuation in the \var{GetC}
+The above type contains a continuation in the \var{GetC}
 constructor. Therefore, users can in principle discard and duplicate
 continuations, thereby potentially duplicating or ignoring effects.
-This makes iteratees subject to the same linearity constraint as we
-have: a first advantage of our approach is the formulation and
-emphasis on the linearity constraint. It appears that variants of
-iteratees (including the *pipes* library) make
-the representation abstract, but at the cost of a complex interface
-for programming them. By stating the linearity requirement no abstract
-API is necessary to guarantee safety.
+Hence, even though the above type is typically transparent in
+iteratee-based libaries, higher-level interfaces are provided
+to discourage non-linear uses.
+
+A first advantage of our approach is the formulation and emphasis on
+the linearity constraint, which is central to correct use of
+effectful continuations. It appears that variants of iteratees (including the
+*pipes* library) make the representation abstract, but at the cost of
+a complex interface for programming them. By stating the linearity
+requirement no abstract API is necessary to guarantee safety.
 
 A second advantage of our library is that effects are not required to
 be monads. Indeed, the use of continuations already provide the
@@ -1539,8 +1466,8 @@ which correspond more directly to negations:
 < type Transducer m1 m2 e1 e2 =
 <   Producer m1 e1 -> Producer m2 e2
 
-Yet, in that work, linearity is still not mentioned, the use of a
-monad rather than monoid persists, and mismatching polarities are not
+Yet, in that work, linearity is only briefly mentioned; the use of a
+monad rather than monoid persists; and mismatching polarities are not
 discussed.
 
 Several production-strength libraries have been built upon the concept
@@ -1629,12 +1556,26 @@ Conclusion
 ==========
 
 We have cast an new light on the current state of coroutine-based
-computation in Haskell. We have done so by drawing inspiration from
-classical linear logic. We have shown that the concepts of duality and
-polarity provide design principles to structure continuation-based
-code. In particular, we have shown that mismatches in polarity
-correspond to buffers and control structures, depending on the kind of
-mismatch.
+computation in Haskell, which we have done so by drawing inspiration
+from classical linear logic. We have further shown that the concepts
+of duality and polarity provide design principles to structure
+continuation-based code. In particular, we have shown that mismatches
+in polarity correspond to buffers and control structures, depending on
+the kind of mismatch.
+
+Using effectful continuations is not a new idea; in fact it was the
+standard way of writing effectful programs in Haskell 1.2. Later
+versions of Haskell switched to a monadic approach. However, given the
+issues outlined in the introduction, and especially the error-prone
+character of lazy IO, many libraries have reverted to explicit use of
+co-routines.
+
+A possible reason for selecting monads over co-routines is that monads
+are rooted in solid theory (categories). However, we hope to have
+shown that co-routines are also rooted in solid theory, namely
+linear-logic. If Haskell had support for linear types, co-routines
+could be used safely, without the quirks of lazy IO.
+
 
 
 \acks
@@ -1774,7 +1715,7 @@ Proof of associativity of append for sinks
 <     (t1 <> t2) Nil <> t3 Nil
 < == -- by def
 <     (t1 Nil <> t2 Nil) <> t3 Nil
-< ==
+< == -- by assoc. of effects
 <     t1 Nil <> (t2 Nil <> t3 Nil)
 < == -- by def
 <     t1 Nil <> ((t2 <> t3) Nil)
@@ -1788,7 +1729,7 @@ Proof of associativity of append for sinks
 <     (t1 <> t2) (Cons a (t3 -! s0))
 < == -- by def
 <     t1 (Cons a (t2 -! (t3 -! s0)))
-< == -- by IH
+< == -- by CIH
 <     t1 (Cons a ((t2 <> t3) -! s0))
 < == -- by def
 <     (t1 <> (t2 <> t3)) (Cons a s0)
@@ -1806,7 +1747,7 @@ Proof of associativity of append for sinks
 <   ((t1 <> t2) -! s) (Cont t0)
 < == -- by def
 <   s (Cont (t0 <> (t1 <> t2)))
-< == -- by IH
+< == -- by CIH
 <   s (Cont ((t0 <> t1) <> t2))
 < == -- by def
 <   (t2 -! s) (Cont (t0 <> t1))
@@ -1818,7 +1759,7 @@ Proof of difference laws
 
 \label{proof}
 
-The laws can be proved by mutual induction with the associative
+The laws can be proved by mutual co-induction with the associative
 laws of the monoids. Let us show only the case for sources, the case
 for sinks being similar.
 
