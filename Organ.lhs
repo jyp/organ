@@ -969,26 +969,26 @@ reading a line in a file source.
 >            Nothing -> c Nil
 >            Just x -> c (Cons x $ hFileSrcSafe h)
 
-> hFileSrcSafe' :: FilePath -> Src String
-> hFileSrcSafe' f snk = do
->   h <- openFile f ReadMode
->   mx <- catch  (Just <$> hFileSrcSafe h snk)
->                       (\(_ :: IOException) -> return Nothing)
->   case mx of
->            Nothing -> forward Nil snk
->            Just x -> return ()
-
-
 Exceptions raised in \var{hIsEOF} should be handled in the same
-way, as well as those raised in a file sink; we leave this simple
-exercise to the reader.
+way. The file sink is responsible for handling its own exceptions so
+there is no need to insert a handler around the invocation of the
+continuation \var{c}.
+
+Using exception handlers in this fasion will secure the library from
+synchronous exceptions, but asynchronous exceptions require a little
+more machinery. The region library presented in
+\citet{kiselyov2008lightweight} can be used for this purpose, as
+outlined in \citet{kiselyov12:region_iteratees}.
 
 In an industrial-strength implementation, one would probably have a
 field in both the \var{Nil} and \var{Full} constructors indicating the
 nature of the exception encountered, if any, but we will not bother in the
 proof of concept implementation presented in this paper.
 
-
+Exceptions are only an issue when implementing the library of
+streams. The programmer using the library does not have to be
+concerned with exceptions as they are caught and communicated properly
+under the hood.
 
 
 Synchronicity and Asynchronicity
