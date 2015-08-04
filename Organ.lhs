@@ -367,7 +367,7 @@ inspection. Manual inspection is unreliable, but weather the linearity
 convention is respected can be algorithmically decided. (See
 sec. \ref{future-work})
 
-The third restriction (instanciation of type-variables) means that
+The third restriction (instantiation of type-variables) means that
 effectful types cannot be used in standard polymorphic Haskell
 functions. This is a severe restriction, but it gives enough leeway to
 implement a full-fledged stream library, as we do below. (Yet some
@@ -376,7 +376,7 @@ approached to lift this limitation have been proposed, e.g. by
 
 
 One might think that the above restriction fails to take into account
-captured ennvironments in functions. Indeed, one can write the following
+captured environments in functions. Indeed, one can write the following
 function, which may be duplicated, but runs linear effects.
 
 > oops :: (() -> Eff) -> IO Bool
@@ -1711,8 +1711,15 @@ source is empty.
 > toListSnk k (Cons x xs) = toList xs $ \xs' -> k (x:xs')
 
 
-Proof of associativity of append for sinks
-==========================================
+Proofs
+======
+
+The laws can be proved by induction, for finite streams. The following
+reasoning is only fast-and-loose in the infinite case, but morally
+correct \citet{danielsson_fast_2006}.
+
+Associativity
+-------------
 
 \var{Nil} case.
 
@@ -1721,7 +1728,7 @@ Proof of associativity of append for sinks
 <     (t1 <> t2) Nil <> t3 Nil
 < == -- by def
 <     (t1 Nil <> t2 Nil) <> t3 Nil
-< == -- by assoc. of effects
+< == -- by associativity of effect composition
 <     t1 Nil <> (t2 Nil <> t3 Nil)
 < == -- by def
 <     t1 Nil <> ((t2 <> t3) Nil)
@@ -1735,7 +1742,7 @@ Proof of associativity of append for sinks
 <     (t1 <> t2) (Cons a (t3 -! s0))
 < == -- by def
 <     t1 (Cons a (t2 -! (t3 -! s0)))
-< == -- by CIH
+< == -- by IH
 <     t1 (Cons a ((t2 <> t3) -! s0))
 < == -- by def
 <     (t1 <> (t2 <> t3)) (Cons a s0)
@@ -1753,21 +1760,19 @@ Proof of associativity of append for sinks
 <   ((t1 <> t2) -! s) (Cont t0)
 < == -- by def
 <   s (Cont (t0 <> (t1 <> t2)))
-< == -- by CIH
+< == -- by IH
 <   s (Cont ((t0 <> t1) <> t2))
 < == -- by def
 <   (t2 -! s) (Cont (t0 <> t1))
 < == -- by def
 <   (t1 -! (t2 -! s)) (Cont t0)
 
-Proof of difference laws
-========================
+Difference laws
+---------------
 
-\label{proof}
+Let us show only the case for sources, the case for sinks being
+similar.
 
-The laws can be proved by mutual co-induction with the associative
-laws of the monoids. Let us show only the case for sources, the case
-for sinks being similar.
 
 The \var{Full} case relies on the monoidal structure of effects:
 
@@ -1815,7 +1820,7 @@ The \var{Cons} case uses mutual induction:
 --  LocalWords:  forkIO readChan writeChan newChan Applicative IORef
 --  LocalWords:  coroutine Coroutines hughes compositionality inFile
 --  LocalWords:  effectful kiselyov openFile ReadMode hGetContents NN
---  LocalWords:  putStr hClose Girard fileSrc stdoutSnk stdout Src
+--  LocalWords:  putStr hClose Girard fileSrc stdoutSnk stdout Src ap
 --  LocalWords:  compositional mempty mappend Dually involutive Snk
 --  LocalWords:  unshift monadic versa forkSrc textit iff rw eof pre
 --  LocalWords:  consumptions onSource onSink unshiftSnk unshiftSrc
@@ -1826,7 +1831,7 @@ The \var{Cons} case uses mutual induction:
 --  LocalWords:  contravariant concatSrcSrc concatSnkSrc concatAux mx
 --  LocalWords:  TODO ssrc monads comonads comonad counit contramap
 --  LocalWords:  sinkToSnk superclasses josef subclasses zipWith Sym
---  LocalWords:  zipSrc forkSnk zipSnk scanl scanSrc scanSnk foldl
+--  LocalWords:  zipSrc forkSnk zipSnk scanl scanSrc scanSnk foldl yy
 --  LocalWords:  foldSrc foldSnk dropSrc dropSnk fromList toList ret
 --  LocalWords:  linesSrc unlinesSnk untilSnk interleaveSnk filterSrc
 --  LocalWords:  filterSnk unchunk chunkSnk claessen newtype forall
@@ -1849,8 +1854,8 @@ The \var{Cons} case uses mutual induction:
 --  LocalWords:  Atze der Ploeg enumFromToSrc ScopedTypeVariables acc
 --  LocalWords:  TypeOperators RankNTypes LiberalTypeSynonyms reify
 --  LocalWords:  BangPatterns TypeSynonymInstances FlexibleInstances
---  LocalWords:  pipelining demultiplexed nnIntro nnElim
---  LocalWords:  ankner edsl axelsson toListSnk
+--  LocalWords:  pipelining demultiplexed nnIntro nnElim QSem newQSem
+--  LocalWords:  ankner edsl axelsson toListSnk waitQSem signalQSem
 
 -->
 
@@ -1873,3 +1878,5 @@ The \var{Cons} case uses mutual induction:
 
 -- > zz :: () -> IO Bool
 -- > zz = f yy
+--  LocalWords:  maccagnoni formulae smallcaps mellis mazurak CIH zz
+--  LocalWords:  boundedChanBuffer danielsson
