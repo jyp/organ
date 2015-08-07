@@ -655,7 +655,17 @@ sources are functors and sinks are contravariant functors. (Given the
 implementation of the morphism actions it is straightforward to check
 the functor laws.)
 
+\paragraph{Monad} It is possible to write a monad instance for
+sources. However, it violates the linearity convention. Consider the
+type of \var{join}:
 
+< join :: Src (Src a) -> Src a
+
+The type parameter of the outer source has been instantiated with an
+effectful type. Allowing monads would require a more complex type
+system than the linearity convention we employ in this paper. We have
+yet to find a need for a monad instance when programming with our
+stream library.
 
 Table of effect-free functions
 ------------------------------
