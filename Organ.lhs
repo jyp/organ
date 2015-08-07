@@ -22,7 +22,7 @@ author:
 -->
 
 \begin{abstract}
-In this paper, we present a novel stream-programming library for
+We present a novel stream-programming library for
 Haskell.  As other coroutine-based stream libraries, our library
 allows synchronous execution, which implies that effects are run in
 lockstep and no buffering occurs.
