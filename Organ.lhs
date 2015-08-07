@@ -282,7 +282,7 @@ Haskell, we must pick $\var{Eff} = \var{IO} ()$, and ensure that
 >   mempty = return ()
 >   mappend = (>>)
 
-The parts of the code which now about $\var{Eff} = \var{IO} ()$ must
+The parts of the code which know about $\var{Eff} = \var{IO} ()$ must
 be carefully written. The type system provides no particular
 guarantees about such code. These IO-interacting functions do not
 interpret any standard fragment of linear logic: they are non-standard
@@ -831,8 +831,8 @@ And the sink for standard output is:
 > stdoutSnk = hFileSnk stdout
 
 (For ease of experimenting with our functions, the data items are
-lines of text --- but an industrial variant would provide chunks of
-raw binary data, to be further parsed.)
+lines of text --- but an production-strength version would provide
+chunks of raw binary data, to be further parsed.)
 
 Conversely, a file source reads data from a file, as follows:
 
@@ -908,7 +908,7 @@ way. The file sink is responsible for handling its own exceptions so
 there is no need to insert a handler around the invocation of the
 continuation \var{c}.  One would probably have a field in both the
 \var{Nil} and \var{Full} constructors indicating the nature of the
-exception encountered, if any, but we will not bother in the proof of
+exception encountered, if any, but we leave it out in the proof of
 concept implementation presented in this paper.
 
 
@@ -1713,6 +1713,8 @@ source is empty.
 
 Proofs
 ======
+
+\label{proof}
 
 The laws can be proved by induction, for finite streams. The following
 reasoning is only fast-and-loose in the infinite case, but morally
