@@ -13,12 +13,16 @@ type NN a = N (N a)
 data One = TT
 newtype Mu f = Mu {fromMu :: forall x. (NN (f x) -> x) -> x}
 data Nu f where
-  Nu :: x -> (x -> NN (f x)) -> Nu f
+  Nu :: x -> (x -> NN (f x)) -> Nu f -- Normally the NN should be in
+                                     -- the functor definition, but
+                                     -- Haskell makes that quite
+                                     -- annoying to implement. So I
+                                     -- just stick it in here.
 data SrcF a x = Nil | Cons a x
 mapF :: (a -> b) -> SrcF a x -> SrcF b x
 mapF f Nil = Nil
 mapF f (Cons a b) = Cons (f a) b
-type Source a = Nu (SrcF a) 
+type Source a = Nu (SrcF a)
 type Sink a = Snk a -- It may work to have Mu here. Test.
 type Snk a = N (Source a)
 type Src a = NN (Source a)
