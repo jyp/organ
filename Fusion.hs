@@ -89,7 +89,9 @@ hFileSnk h (Nu s0 psi) = psi s0 $ \case
   Nil -> hClose h
   Cons c as -> do
     hPutStrLn h c
-    hFileSnk h (Nu as psi)
+    hFileSnk h (Nu as psi) -- this is a final consumer (driver of
+                           -- computation): it is ok to have a loop
+                           -- here.
 
 hFileSrc :: Handle -> Src String
 hFileSrc h c = c $ Nu () $ \ () k -> do
