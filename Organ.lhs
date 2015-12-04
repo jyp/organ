@@ -1610,6 +1610,7 @@ using pandoc, lhs2TeX and latex.
 \bibliographystyle{abbrvnat}
 \bibliography{PaperTools/bibtex/jp,js}
 
+  <!--
 
 \appendix
 
@@ -1825,6 +1826,8 @@ The \var{Cons} case uses mutual induction:
 <   (k -? (s1 <> s2)) (Cons a s0)
 
 (We omit the \var{Nil} case; it is similar to the \var{Full} case)
+
+ -->
 
  <!--
 
