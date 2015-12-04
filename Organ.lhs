@@ -645,9 +645,9 @@ Not sure if these are true or what
 > prop_diff3 t1 t2 s = (t1 <> t2) -? s == t1 -? (t2 -! s)
 > prop_diff4 t s1 s2 = t -! (s1 <> s2) == (t -? s1) -! s2
 
- -->
-
 The proofs for the above laws can be found in Appendix \ref{proof}.
+
+  -->
 
 \paragraph{Functor}
 We have already seen the mapping functions for sources and sinks:
