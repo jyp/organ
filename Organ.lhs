@@ -1415,6 +1415,23 @@ implementation brings together the practical applications that Jackson
 intended, while being faithful to the theoretical foundations in
 logic, via the double-negation embedding.
 
+Transducers
+-----------
+
+\citet{shivers2006continuations} introduces a transducer library which
+enables fusing the transducers to avoid the overhead of composition.
+Transducers are defined on top of channels, a recursive datatype
+reminiscent of our \var{Source} and \var{Sink}. In particular they use
+a type for continuations similar to \var{N}. However, a channel is
+just one type and does not exhibit the duality that our sources and
+sinks provide. Their library do feature a notion of sources and sinks
+but they are not the main abstraction. They are simply aids for
+prodiving and consuming data from transducers,
+respectively. Transducers are "affine"; they can be used at most
+once. The reason linearity is not required is that none of the
+transducers are effectful, the library only provides pure
+transducers. Therefore it is also not concerned with releasing
+resources in a timely fasion.
 
 Iteratees
 ---------
