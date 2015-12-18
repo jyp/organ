@@ -24,3 +24,21 @@ clean:
 gist:
 	cp Organ.lhs ../fadd6e8a2a0aa98ae94d
 	(cd ../fadd6e8a2a0aa98ae94d && git pull && git commit -a -m "sync" && git push)
+
+Talk.tex: Talk.md Makefile
+	pandoc --template=talktemplate.tex --highlight-style=tango -s -f markdown+yaml_metadata_block -t beamer --tab-stop=2 $< -o $@
+
+Talk.pdf: Talk.tex
+	pdflatex Talk.tex
+
+TalkEdinburgh.tex: TalkEdinburgh.md Makefile
+	pandoc --template=talktemplate.tex --highlight-style=tango -s -f markdown+yaml_metadata_block -t beamer --tab-stop=2 $< -o $@
+
+TalkEdinburgh.pdf: TalkEdinburgh.tex
+	pdflatex TalkEdinburgh.tex
+
+TalkDundee.tex: TalkDundee.md Makefile
+	pandoc --template=talktemplate.tex --highlight-style=tango -s -f markdown+yaml_metadata_block -t beamer --tab-stop=2 $< -o $@
+
+TalkDundee.pdf: TalkDundee.tex
+	pdflatex TalkDundee.tex
