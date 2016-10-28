@@ -25,11 +25,11 @@ author:
 
 -->
 
-\begin{abstract}
-We present a novel stream-programming library for a variant of
-Haskell extended with linear types TODO:reference.  As other coroutine-based stream libraries, our library
-allows synchronous execution, which implies that effects are run in
-lockstep and no buffering occurs.
+\begin{abstract} We present a novel stream-programming library for a
+variant of Haskell extended with linear
+types\cite{bernardy_practical_2017}.  As other coroutine-based stream
+libraries, our library allows synchronous execution, which implies
+that effects are run in lockstep and that no buffering occurs.
 
 A novelty of our implementation is that it allows to locally introduce
 buffering or re-scheduling of effects. The buffering requirements (or
@@ -116,7 +116,7 @@ compositionality principle is lost.
 In this paper, we propose to tackle both of these issues by taking advantage of
 linear types.
 In fact, one way to read this
-paper is as an advocacy for linear types support in Haskell\footnote{An earlier version of the paper used a very limitied form of linearity. The present version uses the language presented in TODO: ref}. While
+paper is as an advocacy for linear types support in Haskell. While
 Kiselyov's *iteratees* (\citeyear{kiselyov_iteratees_2012}) already
 solves the issues described above, our grounding in linear logic
 yields a rich structure for types for data streams, capturing
@@ -1533,16 +1533,13 @@ applied to other lazily-evaluated data structures, such as the game
 trees discussed by \citet{hughes_functional_1989}: as far as we know
 this remains to be investigated.
 
-Another line of development would be to implement language support for
-the linearity convention, directly in Haskell. There has been many
-proposals to extend functional languages with linear types (see for
-example \cite[Ch. 9]{tov_practical_2012} for a survey). These
-proposals are often rather involved, because they typically support
-advanced forms of polymorphism allowing to abstract over the linearity
-of an argument. The linearity convention that we use here calls for no
-such complexity, therefore we hope it may be enough of a motivation to
-add simple linear type support in research-grade Haskell compilers.
-
+Another line of development is to implement language support for
+linearity, directly in Haskell. There has been many proposals to
+extend functional languages with linear types (see for example
+\cite[Ch. 9]{tov_practical_2012} for a survey). The present article
+explores how to program in practice using the extension proposed by
+the first author \cite{bernardy_practical_2017}.  An earlier version
+used a very limitied form of linearity.
 
 Conclusion
 ==========
