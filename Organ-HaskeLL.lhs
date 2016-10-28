@@ -8,7 +8,7 @@ author:
 
  <!--
 
-> {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms, BangPatterns, TypeSynonymInstances, FlexibleInstances, FlexibleContexts  #-}
+> {-# LANGUAGE ScopedTypeVariables, TypeOperators, RankNTypes, LiberalTypeSynonyms, BangPatterns, TypeSynonymInstances, FlexibleInstances, FlexibleContexts, GADTs  #-}
 > module Organ where
 > import System.IO
 > import Control.Exception
@@ -109,14 +109,14 @@ file. One may argue that \var{hClose} should not be called in the
 first place --- but then, closing the handle happens only when the
 \var{contents} list can be garbage collected (in full), and relying on
 garbage collection for cleaning resources is brittle; furthermore
-this effect compounds badly with the first issue discussed above.  If
+this effect compounds badly with the first issue discussed above (unpredicatbility of buffering).  If
 one wants to use lazy effectful computations, again, the
 compositionality principle is lost.
 
-In this paper, we propose to tackle both of these issues by mimicking
-the computational behavior of Girard's linear logic
-\cite{girard_linear_1987} in Haskell. In fact, one way to read this
-paper is as an advocacy for linear types support in Haskell. While
+In this paper, we propose to tackle both of these issues by taking advantage of
+linear types.
+In fact, one way to read this
+paper is as an advocacy for linear types support in Haskell\footnote{An earlier version of the paper used a very limitied form of linearity. The present version uses the language presented in TODO: ref}. While
 Kiselyov's *iteratees* (\citeyear{kiselyov_iteratees_2012}) already
 solves the issues described above, our grounding in linear logic
 yields a rich structure for types for data streams, capturing
@@ -142,7 +142,6 @@ Using it, we can implement the printing of a file as follows, and
 guarantee the timely release of resources, even in the presence of
 exceptions:
 
-> main :: Eff
 > main = fileSrc "foo" `fwd` stdoutSnk
 
 In the above \var{fileSrc} provides the contents of a file, and
@@ -158,7 +157,7 @@ general, push-streams control the flow of computation, while
 pull-streams respond to it. We will see that this polarization does
 not need to match the flow of data. We support in particular data
 sources with push-flavor, called co-sources (\var{CoSrc}).
-Co-sources are useful for example when a data stream needs precise
+Co-sources are useful for example when a source data stream needs precise
 control over the execution of effects it embeds (sec
 Sec. \ref{async}). For example, sources cannot be demultiplexed, but
 co-sources can.
@@ -182,8 +181,9 @@ principles are linearity, duality, and polarization. While borrowed
 from linear logic, as far as we know they have not been applied to
 Haskell programming before.
 
-* An embodiment of the above principles, in the form of a HaskeLL
-library for streaming `IO`. Besides supporting compositionality as
+* An embodiment of the above principles, in the form of a HaskeLL\footnote{As all HaskeLL code, ignoring linearity information yields valid Haskell.}
+library for streaming `IO`.
+Besides supporting compositionality as
 outlined above, our library features two concrete novel aspects:
 
   1. A more lightweight design than state-of-the-art co-routine based
@@ -245,13 +245,13 @@ collapsed to a single one:
 > unshift :: N (NN a) ⊸ N a
 > unshift k x = k (shift x)
 
-The above two functions are the \var{return} and \var{join} of the
+Aside. The above two functions are the \var{return} and \var{join} of the
 double negation monad\footnote{for \var{join}, substitute $N\,a$ for
-$a$}; indeed adding a double negation in the type corresponds to
-sending the return value to its consumer. However, we will not be
-using this monadic structure anywhere in the following. Indeed, single
-negations play a central role in our approach, and the monadic
-structure is a mere diversion.
+$a$ in the type of \var{unshift}}; indeed adding a double negation in
+the type corresponds to sending the return value to its
+consumer. However, we will not be using this monadic structure
+anywhere in the following. Indeed, single negations play a central
+role in our approach, and the monadic structure is a mere diversion.
 
 Structure of Effects
 --------------------
@@ -262,7 +262,7 @@ define it to be the empty type: $\var{Eff} = \bot$. This is also the
 natural choice when interpreting the original linear logic of
 \citet{girard_linear_1987}.
 
-The pure logic makes no requirement on effects, but interpretations
+The pure logic treats effects purely abstractly, but interpretations
 may choose to impose a richer structure on them. Such interpretations
 would then not be complete with respect to the logic --- but they
 would remain sound.
@@ -318,8 +318,14 @@ source means to select if some more is available (\var{Cons}) or not
 (\var{Nil}). If there is data, one must then produce a data item and
 *consume* a sink.
 
-> data Source  a   = Nil   | Cons a  (N (Sink    a))
-> data Sink    a   = Full  | Cont    (N (Source  a))
+FIXME: -> should be written ⊸ below
+
+> data Source  a   where
+>   Nil   :: Source a
+>   Cons  :: a -> N (Sink    a) -> Source a
+> data Sink    a   where
+>   Full  :: Sink a
+>   Cont  :: N (Source  a) -> Sink a
 
 Producing a sink means to select if one can accept more elements
 (\var{Cont}) or not (\var{Full}). In the former case, one must then be
@@ -340,56 +346,12 @@ dangerous.  For example, the same file could be closed twice, or not
 at all.  Indeed, the last action of a sink will typically be closing
 the file. Timely closing of the sink can only be guaranteed if the
 actions are run until reaching the end of the pipe (either \var{Full}
-or \var{Nil}). In the rest of the section we precisely define the condition
-that programs need to respect in order to safely use our streams.
+or \var{Nil}).
 
-The first notion that we need to define is that of an effectful type:
+Linear types allow to capture this invariant: all functions from our
+library will input sources and streams linearly.
 
-* The type \var{Eff} is effectful
-* A function type is effectful if the co-domain is effectful
-* A product type is effectful if any of its operands is effectful
-* A sum type is effectful if any of its operands is effectful
-* A type variable is not effectful
-
-Further, we say that a variable with an effectful type is itself effectful.
-
-The linearity convention is then respected iff:
-
-1. No effectful variable may be duplicated or shared. In particular,
-if passed as an argument to a function it may not be used again.
-
-2. Every effectful variable must be consumed (or passed to a function, which
-will be in charged of consuming it).
-
-3. A type variable α can not be instantiated to an effectful type.
-
-In this paper, the linearity convention is enforced by manual
-inspection. Manual inspection is unreliable, but weather the linearity
-convention is respected can be algorithmically decided. (See
-sec. \ref{future-work})
-
-The third restriction (instantiation of type-variables) means that
-effectful types cannot be used in standard polymorphic Haskell
-functions. This is a severe restriction, but it gives enough leeway to
-implement a full-fledged stream library, as we do below. (Yet some
-approached to lift this limitation have been proposed, e.g. by
-\citet{mazurak_lightweight_2010}.)
-
-
-One might think that the above restriction fails to take into account
-captured environments in functions. Indeed, one can write the following
-function, which may be duplicated, but runs linear effects.
-
-> oops :: (() ⊸ Eff) ⊸ IO Bool
-> oops k = do ignore <- k ()
->             return True
-
-However, writing such a function requires to know that $\var{Eff} =
-\var{IO} ()$, and is therefore disallowed by the Haskell type system
-in user code, where \var{Eff} is kept abstract. (The \var{mappend}
-function may combine two effects in one, but not discard or duplicate
-them.)
-
+TODO: linearity of the Handles and IO.
 
 Basics
 ------
@@ -404,14 +366,29 @@ produced by a source. The second argument is the effect to run if no
 data is produced, and the third is the effect to run given the data
 and the remaining source.
 
-> await :: Source a ⊸ Eff ⊸ (a -> Source a ⊸ Eff) ⊸ Eff
-> await Nil eof _ = eof
-> await (Cons x cs) _ k = cs $ Cont $ \xs -> k x xs
+< await :: Source a ⊸ (Eff ⊗ (a -> Source a ⊸ Eff)) ⊸ Eff
+< await Nil (eof,_) = eof
+< await (Cons x cs) (_,k) = cs $ Cont $ \xs -> k x xs
 
-However, the above function breaks the linearity invariant, so we will
-refrain to use it as such. The pattern that it defines is still
-useful: it is valid when the second and third argument consume the
-same set of variables.  Indeed, this condition is often satisfied.
+However, the above function breaks linearity, so we cannot define it
+as such. Instead we have to arrange the types so that `await` can
+choose itself between the `eof` continuation and `k`. To do so, we
+must provide it a so-called additive conjunction. The addivite conjunction is
+the dual of the \var{Either} type: there is a choice, but this choice
+falls on the consumer rather than the producer of the inuput. Additive
+conjunction, written &, can be encoded by sandwiching \var{Either}
+between two inversion of the control flow, thus switching the party
+who makes the choice:
+
+> type a & b = N (Either (N a) (N b))
+
+(One will recognize the similarity between this definition and the
+De Morgan's laws.) Await can then be written as follows:
+
+> await :: Source a ⊸ (Eff & (a -> Source a ⊸ Eff)) ⊸ Eff
+> await Nil r = r (Left $ \eof -> eof)
+> await (Cons x cs) r = r (Right $ \k -> cs $ Cont $ \xs -> k x xs)
+
 
 \paragraph{Writing}
 One can send data to a sink. If the sink is full, the data is ignored.
@@ -479,10 +456,10 @@ forwarding of data from \var{Src} to \var{Snk}:
 In particular, one can flip sink transformers to obtain source transformers,
 and vice versa.
 
-> flipSnk :: (Snk a ⊸ Snk b) -> Src b ⊸ Src a
+> flipSnk :: (Snk a ⊸ Snk b) ⊸ Src b ⊸ Src a
 > flipSnk f s = shiftSrc s . onSink f
 
-> flipSrc :: (Src a ⊸ Src b) -> Snk b ⊸ Snk a
+> flipSrc :: (Src a ⊸ Src b) ⊸ Snk b ⊸ Snk a
 > flipSrc f t = shiftSnk t . onSource f
 
 
@@ -584,7 +561,12 @@ structure of \var{Eff} in this case.
 Algebraic structure
 -------------------
 
-Source and sinks form a monoid under concatenation:
+Source and sinks form a (linear) monoid under concatenation:
+
+> class Monoid a where
+>   mempty :: a
+>   mappend :: a ⊸ a ⊸ a
+
 
 > instance Monoid (Src a) where
 >   mappend = appendSrc
@@ -655,18 +637,6 @@ We have already seen the mapping functions for sources and sinks:
 sources are functors and sinks are contravariant functors. (Given the
 implementation of the morphism actions it is straightforward to check
 the functor laws.)
-
-\paragraph{Monad} It is possible to write a monad instance for
-sources. However, it violates the linearity convention. Consider the
-type of \var{join}:
-
-< join :: Src (Src a) ⊸ Src a
-
-The type parameter of the outer source has been instantiated with an
-effectful type. Allowing monads would require a more complex type
-system than the linearity convention we employ in this paper. We have
-yet to find a need for a monad instance when programming with our
-stream library.
 
 Table of effect-free functions
 ------------------------------
@@ -745,7 +715,7 @@ Turn a source of chunks of data into a single source; and the dual.
 App: Stream-Based Parsing
 -------------------------
 
-To finish with effect-free function, we give an example of a complex
+To finish with effect-free functions, we give an example of a complex
 stream processor, which turns source of unstructured data into a
 source of structured data, given a parser.  This conversion is useful
 for example to turn an XML file, provided as a stream of characters
@@ -941,9 +911,8 @@ Synchronicity and Asynchronicity
 ================================
 \label{async}
 
-One of the main benefits of streams as defined here is that the
-programming interface is (or appears to be) asynchronous, while the
-run-time behavior is synchronous.
+One of the main benefits of streams as defined here is that it
+the details of synchronizing concrete sink and sources are abstracted over.
 That is, one can build a data source regardless of how the data is be consumed,
 or dually one can build a sink regardless of how the data is produced;
 but, despite the independence of definitions, all the code can (and
@@ -1010,18 +979,7 @@ turns.
 
 In order to make any progress, we can let the choice of which source
 to pick fall on the consumer of the stream. The type that we need for
-output data in this case is a so-called additive conjunction. It is
-the dual of the \var{Either} type: there is a choice, but this choice
-falls on the consumer rather than the producer of the data. Additive
-conjunction, written &, can be encoded by sandwiching \var{Either}
-between two inversion of the control flow, thus switching the party
-who makes the choice:
-
-> type a & b = N (Either (N a) (N b))
-
-(One will recognize the similarity between this definition and the
-De Morgan's laws.)
-
+output data in this the additive conjunction. 
 We can then amend the type of multiplexing:
 
 > mux :: Src a ⊸ Src b ⊸ Src (a & b)

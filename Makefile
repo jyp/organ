@@ -1,4 +1,4 @@
-all: Organ.pdf
+all: Organ-HaskeLL.pdf Organ.pdf
 
 %.tool: %.hs
 	ghc --make $*
