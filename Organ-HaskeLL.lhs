@@ -27,7 +27,7 @@ author:
 
 \begin{abstract} We present a novel stream-programming library for a
 variant of Haskell extended with linear
-types\cite{bernardy_practical_2017}.  As other coroutine-based stream
+types\cite{bernardy_retrofitting_2017}.  As other coroutine-based stream
 libraries, our library allows synchronous execution, which implies
 that effects are run in lockstep and that no buffering occurs.
 
@@ -35,7 +35,7 @@ A novelty of our implementation is that it allows to locally introduce
 buffering or re-scheduling of effects. The buffering requirements (or
 re-scheduling opportunities) are indicated by the type-system.
 
-Our library is based on a number of design principles inspired from
+Our library is based on a number of design principles, adapted from
 the theory of Girard's Linear Logic. These principles are applicable
 to the design of any Haskell structure where resource management
 (memory, IO, ...) is critical.
@@ -318,14 +318,12 @@ source means to select if some more is available (\var{Cons}) or not
 (\var{Nil}). If there is data, one must then produce a data item and
 *consume* a sink.
 
-FIXME: -> should be written ⊸ below
-
-> data Source  a   where
->   Nil   :: Source a
->   Cons  :: a -> N (Sink    a) -> Source a
-> data Sink    a   where
->   Full  :: Sink a
->   Cont  :: N (Source  a) -> Sink a
+data Source  a  where
+  Nil :: Source a
+  Cons :: a ⊸ N (Sink a) ⊸ Source a
+data Sink    a  where
+  Full :: Sink a
+  Cont :: (N (Source  a)) ⊸ Sink a
 
 Producing a sink means to select if one can accept more elements
 (\var{Cont}) or not (\var{Full}). In the former case, one must then be
@@ -911,7 +909,7 @@ Synchronicity and Asynchronicity
 ================================
 \label{async}
 
-One of the main benefits of streams as defined here is that it
+One of the main benefits of streams as defined here is that
 the details of synchronizing concrete sink and sources are abstracted over.
 That is, one can build a data source regardless of how the data is be consumed,
 or dually one can build a sink regardless of how the data is produced;
@@ -1130,6 +1128,7 @@ natural one is sequential execution: looping through both sources and
 match the consumptions/productions element-wise, as follows.
 
 > sequentially :: Schedule a
+> sequentially Nil Nil = mempty
 > sequentially Nil (Cons _ xs) = xs Full
 > sequentially (Cons _ xs) Nil = xs Full
 > sequentially (Cons x xs) (Cons x' xs') =
@@ -1150,6 +1149,7 @@ the order of execution of effects. This re-ordering can be taken
 advantage of to run effects concurrently, as follows:
 
 > concurrently :: Schedule a
+> concurrently Nil Nil = mempty
 > concurrently Nil (Cons _ xs) = xs Full
 > concurrently (Cons _ xs) Nil = xs Full
 > concurrently (Cons x xs) (Cons x' xs') = do
@@ -1536,9 +1536,9 @@ this remains to be investigated.
 Another line of development is to implement language support for
 linearity, directly in Haskell. There has been many proposals to
 extend functional languages with linear types (see for example
-\cite[Ch. 9]{tov_practical_2012} for a survey). The present article
+\cite[Ch. 9]{tov_linear_2012} for a survey). The present article
 explores how to program in practice using the extension proposed by
-the first author \cite{bernardy_practical_2017}.  An earlier version
+the first author \cite{bernardy_retrofitting_2017}.  An earlier version
 used a very limitied form of linearity.
 
 Conclusion
