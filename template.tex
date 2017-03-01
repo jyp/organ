@@ -1,4 +1,4 @@
-\documentclass[preprint,authoryear]{PaperTools/latex/sigplanconf}
+\documentclass[sigplan,hidelinks,dvipsnames,natbib,review]{acmart}
 
 % The following \documentclass options may be useful:
 
@@ -15,7 +15,6 @@
 \newcommand\smallcaps[1]{{\sc #1}}
 \newcommand\HREF[2]{\href{#2}{#1}}
 \input{PaperTools/latex/unicodedefs}
-\usepackage[hidelinks]{hyperref}
 \usepackage{longtable,booktabs}
 
 \providecommand{\tightlist}{%
@@ -27,11 +26,6 @@
 \setlength{\pdfpageheight}{\paperheight}
 \setlength{\pdfpagewidth}{\paperwidth}
 
-\conferenceinfo{CONF 'yy}{Month d--d, 20yy, City, ST, Country} 
-\copyrightyear{20yy} 
-\copyrightdata{978-1-nnnn-nnnn-n/yy/mm} 
-\doi{nnnnnnn.nnnnnnn}
-
 % Uncomment one of the following two, if you are not going for the 
 % traditional copyright transfer agreement.
 
@@ -42,22 +36,28 @@
                                   % (paid open-access papers, 
                                   % short abstracts)
 
-\titlebanner{Draft: do not distribute}        % These are ignored unless
-\preprintfooter{Sumitted to IFL 2015}   % 'preprint' option specified.
-
 \title{$title$}
 $if(subtitle)$
 \subtitle{$subtitle$}
 $endif$
 
-\authorinfo{%
-$for(author)$
-$author.name$ %
-$sep$ \and %
-$endfor$
+\author{Jean-Philippe Bernardy}
+\affiliation{%
+  \institution{Gothenburg University}
+  \department{Department of Philosophy, Linguistics and Theory of Science}
+  \streetaddress{Olof Wijksgatan 6}
+  \city{Gothenburg}
+  % \state{VA}
+  \postcode{41255}
+  \country{Sweden}}
+\author{Josef Svenningsson}
+\affiliation{%
+  \institution{Chalmers University of Technology}
+  \city{Paris}
+  % \state{VA}
+  \postcode{???}
+  \country{Sweden}
 }
-           {Chalmers University of Technology and University of Gothenburg}
-           {bernardy,josefs at chalmers.se}
 
 \maketitle
 

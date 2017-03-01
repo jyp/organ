@@ -41,9 +41,6 @@ to the design of any Haskell structure where resource management
 (memory, IO, ...) is critical.
 \end{abstract}
 
-\category{D.1.1}{Applicative (Functional) Programming}{}
-\category{D.3.3}{Language Constructs and Features}{Coroutines}
-
 \keywords
 Streams, Continuations, Linear Types
 
@@ -1567,17 +1564,13 @@ could be used safely, without the quirks of lazy IO.
 
 
 
-\acks
-
+\begin{acks}
 We gratefully thank Koen Claessen, Atze van der Ploeg and Nicolas
 Pouillard for feedback on drafts of this paper.  The source code for
 this paper is a literate Haskell file, whose latest version is
 available at this url:
-https://gist.github.com/jyp/fadd6e8a2a0aa98ae94d
-
-The paper is typeset
-using pandoc, lhs2TeX and latex.
-
+https://github.com/jyp/organ/blob/master/Organ-HaskeLL.lhs
+\end{acks}
 
 
 \bibliographystyle{abbrvnat}

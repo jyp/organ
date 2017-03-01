@@ -1,7 +1,33 @@
 
-nixpkgs:
-  commit: 8ef3eaeb4e531929ec29a880cb4c67f790e5eb70
-  sha256: 4d2fae900d2d99ea294f4f412289af77152ac21d7b2e9ff23581ef11ea00831f
+# nixpkgs:
+#   commit: 8ef3eaeb4e531929ec29a880cb4c67f790e5eb70
+#   sha256: 4d2fae900d2d99ea294f4f412289af77152ac21d7b2e9ff23581ef11ea00831f
 
 nix-deps:
     - pandoc
+    - lhs2tex
+
+non-haskell-deps:
+   - texlive.combine {
+                       inherit (texlive)
+                         algorithm2e
+                         biblatex
+                         cmll
+                         collection-fontsrecommended
+                         comment
+                         environ
+                         latexmk
+                         lm
+                         logreq
+                         ncclatex
+                         ncctools
+                         relsize
+                         scheme-small wrapfig marvosym wasysym wasy cm-super unicode-math filehook lm-math capt-of
+                         stmaryrd lazylist polytable
+                         todonotes
+                         totpages
+                         trimspaces
+                         ucs
+                         xargs
+                         xstring ucharcat
+                     ;}
