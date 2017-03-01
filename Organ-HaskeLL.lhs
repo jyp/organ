@@ -152,10 +152,10 @@ Sources provide data on-demand, while sinks decide when they are ready
 to consume data. This is an instance of the push/pull duality.  In
 general, push-streams control the flow of computation, while
 pull-streams respond to it. We will see that this polarization does
-not need to match the flow of data. We support in particular data
+not need to match the flow of data: for example we support data
 sources with push-flavor, called co-sources (\var{CoSrc}).
 Co-sources are useful for example when a source data stream needs precise
-control over the execution of effects it embeds (sec
+control over the execution of effects it embeds (see
 Sec. \ref{async}). For example, sources cannot be demultiplexed, but
 co-sources can.
 
@@ -173,12 +173,12 @@ conjure a buffer to be able to write the composition:
 The contributions of this paper are
 
 * The formulation of principles for compositional resource-aware
-programming in Haskell (resources include memory and files). The
-principles are linearity, duality, and polarization. While borrowed
+programming in Haskell (resources include memory and files), based on
+linearity and polarization. While these principles are borrowed
 from linear logic, as far as we know they have not been applied to
 Haskell programming before.
 
-* An embodiment of the above principles, in the form of a HaskeLL\footnote{As all HaskeLL code, ignoring linearity information yields valid Haskell.}
+* An embodiment of the above principles, in the form of a Hask-LL\footnote{Hask-LL is an extension of Haskell to linear types~\{bernardy_retrofitting_2017}. The main addition is the linear arrow (⊸) for functions which guarantee to consume their argument exactly once.}
 library for streaming `IO`.
 Besides supporting compositionality as
 outlined above, our library features two concrete novel aspects:
@@ -218,12 +218,12 @@ A shortcut for double negations is also convenient.
 > type NN a = N (N a)
 
 The basic idea (imported from classical logic) pervading this paper
-is that producing a result of type α is equivalent to consuming an
+is that in the presence of effects, producing a result of type α is equivalent to consuming an
 argument of type $N α$. Dually, consuming an argument of type α is
 equivalent to producing a result of type $N α$. In this paper we call
 these equivalences the duality principle.
 
-In classical logic, negation is involutive; that is: $\var{NN}\,α = α$
+In classical logic, negation is involutive; that is: $\var{NN}\,α = α$.
 However, because we work within Haskell, we do not have this
 equality\footnote{Even though
 \citet{munch-maccagnoni_formulae-as-types_2014} achieves an involutive
@@ -248,15 +248,15 @@ $a$ in the type of \var{unshift}}; indeed adding a double negation in
 the type corresponds to sending the return value to its
 consumer. However, we will not be using this monadic structure
 anywhere in the following. Indeed, single negations play a central
-role in our approach, and the monadic structure is a mere diversion.
+role in our approach, and thus the monadic structure is a mere diversion.
 
 Structure of Effects
 --------------------
 
 When dealing with purely functional programs, continuations have no
 effects. In this case, one can let \var{Eff} remain abstract, or
-define it to be the empty type: $\var{Eff} = \bot$. This is also the
-natural choice when interpreting the original linear logic of
+define it to be the empty type: $\var{Eff} = \bot$. This choice is also
+natural when interpreting the original linear logic of
 \citet{girard_linear_1987}.
 
 The pure logic treats effects purely abstractly, but interpretations
@@ -270,12 +270,12 @@ In our case, we first require \var{Eff} to be a monoid. Its unit
 \smallcaps{mix} rules in linear logic
 \citep{bernardy_composable_2015,mellis_resource_2010})
 
-For users of the stream library, \var{Eff} will remain an abstract
-monoid. However in this paper we will develop concrete effectful
+For users of the stream library, \var{Eff} shall remain an abstract
+monoid. However in this paper we develop concrete effectful
 streams, and therefore we greatly extend the structure of effects. In
 fact, because we will provide streams interacting with files and other
 operating-system resources, and write the whole code in standard
-Haskell, we must pick $\var{Eff} = \var{IO} ()$, and ensure that
+Hask-LL, we must pick $\var{Eff} = \var{IO} ()$, and ensure that
 \var{Eff} can be treated as a monoid.
 
 > type Eff = IO ()
