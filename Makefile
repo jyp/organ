@@ -4,6 +4,9 @@ all: Organ-HaskeLL.pdf
 	ghc --make $*
 	mv -f $* $@
 
+PaperTools/bibtex/jp.short.bib: PaperTools/bibtex/jp.short.bib
+	make -C PaperTools/bibtex
+
 clean:
 	rm -f *.aux *.pdf *.log *.blg *.bbl
 
@@ -16,7 +19,7 @@ clean:
 %.tex: %.md.lhs CleanTex.tool
 	lhs2TeX < $*.md.lhs | ./CleanTex.tool >$@
 
-%.pdf: %.tex
+%.pdf: %.tex PaperTools/bibtex/jp.short.bib
 	pdflatex $*
 	bibtex $*
 	pdflatex $*

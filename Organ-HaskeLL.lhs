@@ -1541,7 +1541,7 @@ used a very limitied form of linearity.
 Conclusion
 ==========
 
-We have cast an new light on the current state of coroutine-based
+We have cast a new light on the current state of coroutine-based
 computation in Haskell, which we have done so by drawing inspiration
 from classical linear logic. We have further shown that the concepts
 of duality and polarity provide design principles to structure
@@ -1574,7 +1574,7 @@ https://github.com/jyp/organ/blob/master/Organ-HaskeLL.lhs
 
 
 \bibliographystyle{abbrvnat}
-\bibliography{PaperTools/bibtex/jp,js}
+\bibliography{PaperTools/bibtex/jp.short,js}
 
   <!--
 
