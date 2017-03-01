@@ -15,13 +15,21 @@ author:
 > import Control.Concurrent (forkIO, readChan, writeChan, Chan, newChan, QSem, newQSem, waitQSem, signalQSem)
 > import Control.Applicative hiding (empty)
 > import Data.IORef
-> import Data.Monoid
 > import Prelude hiding (tail)
 > import Control.Monad (ap)
+> import Data.Monoid
 
 > type a ⊸ b = a -> b
 > type a ⊗ b = (a,b)
 > infixr ⊸
+
+
+> data Source  a  where
+>   Nil :: Source a
+>   Cons :: a -> N (Sink a) -> Source a
+> data Sink    a  where
+>   Full :: Sink a
+>   Cont :: (N (Source  a)) -> Sink a
 
 -->
 
@@ -315,12 +323,12 @@ source means to select if some more is available (\var{Cons}) or not
 (\var{Nil}). If there is data, one must then produce a data item and
 *consume* a sink.
 
-data Source  a  where
-  Nil :: Source a
-  Cons :: a ⊸ N (Sink a) ⊸ Source a
-data Sink    a  where
-  Full :: Sink a
-  Cont :: (N (Source  a)) ⊸ Sink a
+< data Source  a  where
+<   Nil :: Source a
+<   Cons :: a ⊸ N (Sink a) ⊸ Source a
+< data Sink    a  where
+<   Full :: Sink a
+<   Cont :: (N (Source  a)) ⊸ Sink a
 
 Producing a sink means to select if one can accept more elements
 (\var{Cont}) or not (\var{Full}). In the former case, one must then be
@@ -558,9 +566,9 @@ Algebraic structure
 
 Source and sinks form a (linear) monoid under concatenation:
 
-> class Monoid a where
->   mempty :: a
->   mappend :: a ⊸ a ⊸ a
+< class Monoid a where
+<   mempty :: a
+<   mappend :: a ⊸ a ⊸ a
 
 
 > instance Monoid (Src a) where
