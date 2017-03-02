@@ -354,8 +354,6 @@ or \var{Nil}).
 Linear types allow to capture this invariant: all functions from our
 library will input sources and streams linearly.
 
-FIXME: linearity of the Handles and IO.
-
 Basics
 ------
 
@@ -648,9 +646,9 @@ implementation is available in the appendix.
 Zip two sources, and the dual.
 
 > class Drop a where drop :: a ⊸ b ⊸ b
-> class Dup a where dup :: a ⊸ (a,a)
-> zipSrc :: (Drop a, Drop b) => Src a ⊸ Src b ⊸ Src (a,b)
-> forkSnk :: (Drop a, Drop b) => Snk (a,b) ⊸ Src a ⊸ Snk b
+
+> zipSrc :: Drop a => Src a ⊸ Src b ⊸ Src (a,b)
+> forkSnk :: Drop a => Snk (a,b) ⊸ Src a ⊸ Snk b
 
  <!--
 or: forkSnk :: Snk (a,b) ⊸ Snk a ⅋ Snk b
@@ -678,7 +676,7 @@ Drop some elements from a source, and the dual.
 
 Convert a list to a source, and vice versa.
 
-> fromList :: [a] -> Src a
+> fromList :: [a] ⊸ Src a
 > toList :: Src a ⊸ NN [a]
 
 Split a source in lines, and the dual.
@@ -690,7 +688,7 @@ Split a source in lines, and the dual.
 Consume elements until the predicate is reached; then the sink is
 closed.
 
-> untilSnk :: (a -> Bool) ⊸ Snk a
+> untilSnk :: Drop a => (a -> Bool) ⊸ Snk a
 
 Interleave two sources, and the dual.
 
@@ -700,12 +698,12 @@ Interleave two sources, and the dual.
 Forward data coming from the input source to the result source and to
 the second argument sink.
 
-> tee :: Src a ⊸ Snk a ⊸ Src a
+> tee :: (a ⊸ (b,c)) -> Src a ⊸ Snk b ⊸ Src c
 
 Filter a source, and the dual.
 
-> filterSrc :: (a -> Bool) ⊸ Src a ⊸ Src a
-> filterSnk :: (a -> Bool) ⊸ Snk a ⊸ Snk a
+> filterSrc :: (a ⊸ Maybe b) ⊸ Src a ⊸ Src b
+> filterSnk :: (a ⊸ Maybe b) ⊸ Snk b ⊸ Snk a
 
 Turn a source of chunks of data into a single source; and the dual.
 
@@ -1328,20 +1326,21 @@ We then have to send each message to both clients. This may be done
 using the following effect-free function, which forwards everything
 sent to a sink to its two argument sinks.
 
-> collapseSnk :: Snk a ⊸ Snk a ⊸ Snk a
-> collapseSnk t1 t2 Nil = t1 Nil <> t2 Nil
-> collapseSnk t1 t2 (Cons x xs)
->   =  t1  (Cons x $ \c1 ->
->      t2  (Cons x $ \c2 ->
->          shiftSrc xs (collapseSnk  (flip forward c1)
->                                    (flip forward c2))))
+> collapseSnk :: (a ⊸ (b,c)) -> Snk b ⊸ Snk c ⊸ Snk a
+> collapseSnk dup t1 t2 Nil = t1 Nil <> t2 Nil
+> collapseSnk dup t1 t2 (Cons x xs)
+>   =  t1  (Cons y $ \c1 ->
+>      t2  (Cons z $ \c2 ->
+>          shiftSrc xs (collapseSnk dup  (flip forward c1)
+>                                        (flip forward c2))))
+>   where (y,z) = dup x
 
 
 The server can then be defined by composing the above two functions.
 
-> server :: Client a ⊸ Client a ⊸ Eff
-> server (i1,o1) (i2,o2) = fwd  (bufferedDmux i1 i2)
->                               (collapseSnk o1 o2)
+> server :: (a ⊸ (a,a)) ⊸ Client a ⊸ Client a ⊸ Eff
+> server dup (i1,o1) (i2,o2) = fwd  (bufferedDmux i1 i2)
+>                                   (collapseSnk dup o1 o2)
 
 
 
@@ -1593,7 +1592,7 @@ Table of Functions: implementations
 >   case ta' of
 >     Nil -> (forward tb) Full <> sab Nil
 >     Cons a as ->  case tb of
->       Nil -> as Full <> sab Nil
+>       Nil -> drop a (as Full <> sab Nil)
 >       Cons b bs -> fwd (cons (a,b) $ zipSrc as bs) sab
 
 > forkSrc sab ta tb
@@ -1628,7 +1627,7 @@ source is empty.
 
 > dropSnk 0 s s' = s s'
 > dropSnk _ s Nil = s Nil
-> dropSnk i s (Cons _ s') = shiftSrc (dropSrc (i-1) s') s
+> dropSnk i s (Cons x s') = drop x (shiftSrc (dropSrc (i-1) s') s)
 
 > fromList = foldr cons empty
 
@@ -1668,14 +1667,14 @@ source is empty.
 > interleaveSnk snk src (Cons a s)
 >   = snk (Cons a (interleave s src))
 
-> tee s1 t1 = flipSnk (collapseSnk t1) s1
+> tee deal s1 t1 = flipSnk (collapseSnk deal t1) s1
 
 > filterSrc p = flipSnk (filterSnk p)
 
 > filterSnk _ snk Nil = snk Nil
-> filterSnk p snk (Cons a s)
->   | p a       = snk (Cons a (filterSrc p s))
->   | otherwise = s (Cont (filterSnk p snk))
+> filterSnk p snk (Cons a s) = case p a of
+>   Just b -> snk (Cons b (filterSrc p s))
+>   Nothing -> s (Cont (filterSnk p snk))
 
 > unchunk = flipSnk chunkSnk
 
