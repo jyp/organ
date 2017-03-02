@@ -15,7 +15,7 @@ author:
 > import Control.Concurrent (forkIO, readChan, writeChan, Chan, newChan, QSem, newQSem, waitQSem, signalQSem)
 > import Control.Applicative hiding (empty)
 > import Data.IORef
-> import Prelude hiding (tail)
+> import Prelude hiding (tail, drop)
 > import Control.Monad (ap)
 > import Data.Monoid
 
@@ -186,7 +186,7 @@ linearity and polarization. While these principles are borrowed
 from linear logic, as far as we know they have not been applied to
 Haskell programming before.
 
-* An embodiment of the above principles, in the form of a Hask-LL\footnote{Hask-LL is an extension of Haskell to linear types~\{bernardy_retrofitting_2017}. The main addition is the linear arrow (⊸) for functions which guarantee to consume their argument exactly once.}
+* An embodiment of the above principles, in the form of a Hask-LL\footnote{Hask-LL is an extension of Haskell to linear types fully described by~\citet{bernardy_retrofitting_2017}. For the purposes of this paper, the main addition is the linear arrow (⊸) for functions which guarantee to consume their argument exactly once. Pairs also become linear.}
 library for streaming `IO`.
 Besides supporting compositionality as
 outlined above, our library features two concrete novel aspects:
@@ -354,13 +354,13 @@ or \var{Nil}).
 Linear types allow to capture this invariant: all functions from our
 library will input sources and streams linearly.
 
-TODO: linearity of the Handles and IO.
+FIXME: linearity of the Handles and IO.
 
 Basics
 ------
 
-We begin by presenting three basic function to manipulate
-\var{Source} and \var{Sink}: one to read from sources, one to write
+As a simple illustration, we present three basic functions to manipulate
+\var{Source}s and \var{Sink}s: one to read from sources, one to write
 to sinks, and one to connect sources and sinks.
 
 \paragraph{Reading}
@@ -369,7 +369,7 @@ produced by a source. The second argument is the effect to run if no
 data is produced, and the third is the effect to run given the data
 and the remaining source.
 
-< await :: Source a ⊸ (Eff ⊗ (a -> Source a ⊸ Eff)) ⊸ Eff
+< await :: Source a ⊸ (Eff, (a -> Source a ⊸ Eff)) ⊸ Eff
 < await Nil (eof,_) = eof
 < await (Cons x cs) (_,k) = cs $ Cont $ \xs -> k x xs
 
@@ -378,10 +378,10 @@ as such. Instead we have to arrange the types so that `await` can
 choose itself between the `eof` continuation and `k`. To do so, we
 must provide it a so-called additive conjunction. The addivite conjunction is
 the dual of the \var{Either} type: there is a choice, but this choice
-falls on the consumer rather than the producer of the inuput. Additive
+falls on the consumer rather than the producer of the input. Additive
 conjunction, written &, can be encoded by sandwiching \var{Either}
-between two inversion of the control flow, thus switching the party
-who makes the choice:
+between two inversion of the control flow, thereby switching the party
+which makes the choice:
 
 > type a & b = N (Either (N a) (N b))
 
@@ -394,13 +394,15 @@ De Morgan's laws.) Await can then be written as follows:
 
 
 \paragraph{Writing}
-One can send data to a sink. If the sink is full, the data is ignored.
-The third argument is a continuation getting the "new" sink, that
-obtained after the "old" sink has consumed the data.
+
+To write can write an element into a sink and obtain a new, (doubly
+negated) sink which represents the state of the sink after the "old"
+sink has consumed the data.  If the sink is full, the data is ignored.
 
 > yield :: a -> Sink a ⊸ (Sink a ⊸ Eff) ⊸ Eff
 > yield x (Cont c) k = c (Cons x k)
 > yield _ Full k = k Full
+
 
 \paragraph{Forwarding}
 One can forward the data from a source to a sink, as follows. The
@@ -411,8 +413,6 @@ productions and consumptions on the stream.
 > forward s (Cont s') = s' s
 > forward Nil Full = mempty
 > forward (Cons _ xs) Full = xs Full
-
-
 
 
 Baking in negations: exercise in duality
@@ -496,7 +496,7 @@ in sinks is a special case of mapping.
 > nnElim' :: Snk (NN a) ⊸ Snk a
 > nnElim' = mapSnk shift
 
-The duals are easily implemented by case analysis, following the mutual
+The duals are implemented by case analysis, following the mutual
 recursion pattern introduced above.
 
 > nnElim :: Src (NN a) ⊸ Src a
@@ -506,12 +506,11 @@ recursion pattern introduced above.
 > nnIntro' k Nil = k Nil
 > nnIntro' k (Cons x xs) = x $ \x' -> k (Cons x' $ nnElim xs)
 
-
 Effect-Free Streams
 ===================
 
 The functions seen so far make no use of the fact that \var{Eff} can
-embed IO actions. In fact, a large number of useful functions over
+embed IO actions. Yet, a large number of useful functions over
 streams can be implemented without relying on IO. We give an overview
 of effect-free streams in this section.
 
@@ -527,13 +526,8 @@ sources, as follows:
 > cons :: a -> Src a ⊸ Src a
 > cons a s s' = yield a s' s
 
-> tail :: Src a ⊸ Src a
-> tail = flipSnk $ \t s -> case s of
->   Nil -> t Nil
->   Cons _ xs -> fwd xs t
-
-(Taking just the head is not meaningful due to the linearity
-constraint)
+(Taking the head or tail is not meaningful due to the linearity
+constraints: `await` must be used.)
 
 Dually, the full sink is simply
 
@@ -555,9 +549,11 @@ stream must be notified of its closing. Note the use of the monoidal
 structure of \var{Eff} in this case.
 
 > takeSrc i = flipSnk (takeSnk i)
+> takeSrc 0 = \src snk -> case snk of
+>   Full -> src Full
+>   Cont k -> k Nil <> src Full
 
 > takeSnk _ s Nil = s Nil
-> takeSnk 0 s (Cons _ s') = s Nil <> s' Full
 > takeSnk i s (Cons a s') = s (Cons a (takeSrc (i-1) s'))
 
 
@@ -651,8 +647,10 @@ implementation is available in the appendix.
 
 Zip two sources, and the dual.
 
-> zipSrc :: Src a ⊸ Src b ⊸ Src (a,b)
-> forkSnk :: Snk (a,b) ⊸ Src a ⊸ Snk b
+> class Drop a where drop :: a ⊸ b ⊸ b
+> class Dup a where dup :: a ⊸ (a,a)
+> zipSrc :: (Drop a, Drop b) => Src a ⊸ Src b ⊸ Src (a,b)
+> forkSnk :: (Drop a, Drop b) => Snk (a,b) ⊸ Src a ⊸ Snk b
 
  <!--
 or: forkSnk :: Snk (a,b) ⊸ Snk a ⅋ Snk b
@@ -665,8 +663,8 @@ Zip two sinks, and the dual.
 
 Equivalent of \var{scanl'} for sources, and the dual
 
-> scanSrc :: (b -> a -> b) -> b -> Src a ⊸ Src b
-> scanSnk :: (b -> a -> b) -> b -> Snk b ⊸ Snk a
+> scanSrc :: (b -> a -> (b,c)) -> b -> Src a ⊸ Src c
+> scanSnk :: (b -> a -> (b,c)) -> b -> Snk c ⊸ Snk a
 
 Equivalent of \var{foldl'} for sources, and the dual.
 
@@ -675,8 +673,8 @@ Equivalent of \var{foldl'} for sources, and the dual.
 
 Drop some elements from a source, and the dual.
 
-> dropSrc :: Int -> Src a ⊸ Src a
-> dropSnk :: Int -> Snk a ⊸ Snk a
+> dropSrc :: Drop a => Int -> Src a ⊸ Src a
+> dropSnk :: Drop a => Int -> Snk a ⊸ Snk a
 
 Convert a list to a source, and vice versa.
 
@@ -1055,21 +1053,17 @@ co-sinks. The first example shows how to provide a file as a co-source:
 > coFileSrc :: Handle -> CoSrc String
 > coFileSrc h Nil = hClose h
 > coFileSrc h (Cons x xs) = do
->   e <- hIsEOF h
->   if e then do
->          hClose h
->          xs Full
->        else do
 >          x' <- hGetLine h
 >          x x'                     -- (1)
 >          xs $ Cont $ coFileSrc h  -- (2)
 
 
-Compared to \var{fileSrc}, the difference is that this function can
-decide the ordering of effects ran in a co-sink connected to it. That is,
-the lines (1) and (2) have no data dependency. Therefore they may be
-run in any order. (Blindly doing so is a bad idea though, as the
-\var{Full} action on the sink will be run before all other actions.)
+Compared to \var{fileSrc}, the difference are that this function 1.
+  decides when to close the file (an error will happen if the file is to small)
+and 2.
+decides the ordering of effects ran in a co-sink connected to it. That is,
+even though the lines (1) and (2) have no data dependency, they are
+run in a specific, given order.
 We will see in the next section how this situation generalizes.
 
 The second example is a infinite co-sink that sends data to a file.
@@ -1079,7 +1073,7 @@ The second example is a infinite co-sink that sends data to a file.
 > coFileSink h (Cont c) = c (Cons  (hPutStrLn h)
 >                                  (coFileSink h))
 
-Compared to \var{fileSnk}, the difference is that one does not control
+Compared to \var{fileSnk}, the difference is that the program does not control
 the order of execution of effects. The effect of writing the current
 line is put in a data structure, and its execution is up to the
 co-source which eventually connects to the co-sink. Thus, the
@@ -1090,7 +1084,7 @@ In sum, using co-sources and co-sinks shifts the flow of control from
 the sink to the source. It should be stressed that, in the programs
 which use the functions defined so far (even those that use IO),
 synchronicity is preserved: no data is buffered implicitly, and
-reading and writing are interleaved.
+reading and writing occur in lockstep.
 
 Asynchronicity
 --------------
@@ -1109,8 +1103,8 @@ hold locally.
 When converting a \var{Src} to a \var{CoSrc} (or dually \var{CoSnk} to
 a \var{Snk}), we have two streams which are ready to respond to
 pulling of data from them.  This means that effects must be scheduled
-explicitly, as we have seen an example above when manually converting
-the file source to a file co-source.
+explicitly, as we have seen in the example above, when writing the
+file co-source.
 
 In general, given a \var{Schedule}, we can implement the above two
 conversions:
@@ -1121,25 +1115,25 @@ conversions:
 We define a \var{Schedule} as the reconciliation between a source and a
 co-sink:
 
-> type Schedule a = Source a ⊸ Source (N a) ⊸ Eff
+> type Schedule a = Source a ⊸ Src (N a) ⊸ Eff
 
 Implementing the conversions is then straightforward:
 
-> srcToCoSrc strat s s0 = shiftSrc s $ \ s1 -> strat s1 s0
-> coSnkToSnk strat s s0 = shiftSrc s $ \ s1 -> strat s0 s1
+> srcToCoSrc strat s s0 = shiftSrc s $ \s' -> strat s' (forward s0)
+> coSnkToSnk strat s0 s = strat s s0
 
 What are possible scheduling strategies? The simplest, and most
 natural one is sequential execution: looping through both sources and
 match the consumptions/productions element-wise, as follows.
 
-> sequentially :: Schedule a
-> sequentially Nil Nil = mempty
-> sequentially Nil (Cons _ xs) = xs Full
-> sequentially (Cons _ xs) Nil = xs Full
-> sequentially (Cons x xs) (Cons x' xs') =
->   x' x <>   (shiftSrc xs  $ \sa ->
->              shiftSrc xs' $ \sna ->
->              sequentially sa sna)
+> sequentially :: Drop a => Schedule a
+> sequentially Nil s = s Full
+> sequentially (Cons x xs) s = s $ Cont $ \s' -> case s' of
+>   Cons x' xs' -> do
+>     x' x
+>     shiftSrc xs $ \sa -> sequentially sa xs'
+>   Nil -> drop x (xs Full)
+
 
 When effects are arbitrary IO actions, sequential execution is the
 only sensible schedule: indeed, the sources and sinks expect their
@@ -1153,15 +1147,15 @@ is confident that execution order does not matter), one can shuffle
 the order of execution of effects. This re-ordering can be taken
 advantage of to run effects concurrently, as follows:
 
-> concurrently :: Schedule a
-> concurrently Nil Nil = mempty
-> concurrently Nil (Cons _ xs) = xs Full
-> concurrently (Cons _ xs) Nil = xs Full
-> concurrently (Cons x xs) (Cons x' xs') = do
->   forkIO $ x' x
->   (shiftSrc xs  $ \sa ->
->    shiftSrc xs' $ \sna ->
->    concurrently sa sna)
+> concurrently :: Drop a => Schedule a
+> concurrently Nil s = s Full
+> concurrently (Cons x xs) s = s $ Cont $ \s' -> case s' of
+>   Cons x' xs' -> do
+>       forkIO (x' x)
+>       shiftSrc xs $ \sa -> sequentially sa xs'
+>   Nil -> drop x (xs Full)
+
+
 
 The above strategy is useful if the production or consumption
 of elements is expensive and distributable over computation units.
@@ -1262,7 +1256,7 @@ serve as buffer:
 >   forkIO $ fwd (varCoSnk c) f
 >   varSrc c g
 
-All the above buffering operations work on sources, but they can be generically
+The above buffering operations work on sources, but they can be generically
 inverted to work on sinks, as follows.
 
 > flipBuffer :: (forall a. CoSrc a ⊸ Src a) -> Snk b ⊸ CoSnk b
@@ -1613,9 +1607,9 @@ Table of Functions: implementations
 > scanSrc f !z = flipSnk (scanSnk f z)
 
 > scanSnk _ _ snk Nil          = snk Nil
-> scanSnk f z snk (Cons a s)   = snk $  Cons next $
+> scanSnk f z snk (Cons a s)   = snk $  Cons y $
 >                                       scanSrc f next s
->   where next = f z a
+>   where (next,y) = f z a
 
 > foldSrc' f !z s nb = s (Cont (foldSnk' f z nb))
 
@@ -1802,6 +1796,7 @@ The \var{Cons} case uses mutual induction:
 (We omit the \var{Nil} case; it is similar to the \var{Full} case)
 
  -->
+
 
  <!--
 
