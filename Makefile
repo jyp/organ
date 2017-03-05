@@ -4,7 +4,7 @@ all: Organ-HaskeLL.pdf
 	ghc --make $*
 	mv -f $* $@
 
-PaperTools/bibtex/jp.short.bib: PaperTools/bibtex/jp.short.bib
+PaperTools/bibtex/jp.short.bib: PaperTools/bibtex/jp.bib
 	make -C PaperTools/bibtex
 
 clean:

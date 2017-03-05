@@ -284,24 +284,30 @@ streams, and therefore we greatly extend the structure of effects. In
 fact, because we will provide streams interacting with files and other
 operating-system resources, and write the whole code in standard
 Hask-LL, we must pick $\var{Eff} = \var{IO} ()$, and ensure that
-\var{Eff} can be treated as a monoid.
+\var{Eff} can be treated as a linear monoid.
 
 > type Eff = IO ()
 
+< class Monoid a where
+<   mempty :: a
+<   mappend :: a ⊸ a ⊸ a
+< instance Monoid Eff
+
 The parts of the code which know about $\var{Eff} = \var{IO} ()$ must
-be carefully written. The type system provides no particular
-guarantees about such code. These IO-interacting functions do not
-interpret any standard fragment of linear logic: they are non-standard
-extensions of its model.
+be carefully written, because the type system does not provide strong
+guarantees about such code. In fact these IO-interacting functions do not
+interpret ⊥ in a standard way: they are non-standard extensions of its model.
 
 Streams
 =======
 
-Our guiding design principle is duality. This principle is reflected in
-the design of the streaming library: we not only have a type for
-sources of data but also a type for sinks. For example, a simple
-stream processor reading from a single source and writing to a single
-sink will be given the following type:
+Our main guiding design principle is duality. In fact we will make
+crucial use of duality in the later sections of this paper.  The
+duality principle is reflected in the design of the streaming
+library: we not only have a type for sources of data but also a type
+for sinks. For example, a simple stream processor reading from a
+single source and writing to a single sink will be given the
+following type:
 
 < simple :: Src a ⊸ Snk a ⊸ Eff
 
@@ -316,8 +322,6 @@ dispatch a single source to multiple sinks, as in the following type signature:
 
 < forkSrc :: Src (a,b) ⊸ Snk a ⊸ Snk b ⊸ Eff
 
-Familiarity with duality will be crucial in the later sections of this paper.
-
 We define sources and sinks by mutual recursion. Producing a
 source means to select if some more is available (\var{Cons}) or not
 (\var{Nil}). If there is data, one must then produce a data item and
@@ -330,7 +334,7 @@ source means to select if some more is available (\var{Cons}) or not
 <   Full :: Sink a
 <   Cont :: (N (Source  a)) ⊸ Sink a
 
-Producing a sink means to select if one can accept more elements
+Producing a sink means to select whether one can accept more elements
 (\var{Cont}) or not (\var{Full}). In the former case, one must then be
 able to consume a source. The \var{Full} case is useful when the sink
 bails out early, for example when it encounters an exception.
@@ -352,7 +356,9 @@ actions are run until reaching the end of the pipe (either \var{Full}
 or \var{Nil}).
 
 Linear types allow to capture this invariant: all functions from our
-library will input sources and streams linearly.
+library will input sources and streams linearly. We underline that
+even individual stream elements are linear, which will allow us to
+store effects in streams later on.
 
 Basics
 ------
@@ -362,24 +368,25 @@ As a simple illustration, we present three basic functions to manipulate
 to sinks, and one to connect sources and sinks.
 
 \paragraph{Reading}
-One may want to provide the following function, waiting for data to be
+One may attempt to write the following function, waiting for data to be
 produced by a source. The second argument is the effect to run if no
 data is produced, and the third is the effect to run given the data
 and the remaining source.
 
-< await :: Source a ⊸ (Eff, (a -> Source a ⊸ Eff)) ⊸ Eff
-< await Nil (eof,_) = eof
-< await (Cons x cs) (_,k) = cs $ Cont $ \xs -> k x xs
+< await :: Source a ⊸ Eff ⊸ (a -> Source a ⊸ Eff) ⊸ Eff
+< await Nil          eof  _ = eof
+< await (Cons x cs)  _    k = cs $ Cont $ \xs -> k x xs
 
-However, the above function breaks linearity, so we cannot define it
-as such. Instead we have to arrange the types so that `await` can
-choose itself between the `eof` continuation and `k`. To do so, we
-must provide it a so-called additive conjunction. The addivite conjunction is
-the dual of the \var{Either} type: there is a choice, but this choice
-falls on the consumer rather than the producer of the input. Additive
-conjunction, written &, can be encoded by sandwiching \var{Either}
-between two inversion of the control flow, thereby switching the party
-which makes the choice:
+However, the above function breaks linearity (`eof` and `k` are not
+always used), so we cannot define it as such. Instead we have to
+arrange the types so that `await` can choose *itself* between the `eof`
+continuation and `k`. To do so, we must provide them as a so-called
+additive conjunction. The addivite conjunction is the dual of the
+\var{Either} type: there is a choice, but this choice falls on the
+consumer rather than the producer of the input. The additive conjunction,
+written &, can be encoded by sandwiching \var{Either} between two
+inversions of the control flow, thereby switching the party which makes
+the choice:
 
 > type a & b = N (Either (N a) (N b))
 
@@ -388,18 +395,20 @@ De Morgan's laws.) Await can then be written as follows:
 
 > await :: Source a ⊸ (Eff & (a -> Source a ⊸ Eff)) ⊸ Eff
 > await Nil r = r (Left $ \eof -> eof)
-> await (Cons x cs) r = r (Right $ \k -> cs $ Cont $ \xs -> k x xs)
+> await (Cons cs) r = r (Right $ \k ->  _)
+
+-- (Right $ \k -> cs $ Cont $ \xs -> k x xs)
 
 
 \paragraph{Writing}
 
-To write can write an element into a sink and obtain a new, (doubly
+One can also write data into a sink, and obtain a new, (doubly
 negated) sink which represents the state of the sink after the "old"
 sink has consumed the data.  If the sink is full, the data is ignored.
 
 > yield :: a -> Sink a ⊸ (Sink a ⊸ Eff) ⊸ Eff
 > yield x (Cont c) k = c (Cons x k)
-> yield _ Full k = k Full
+> yield x (Full z) k = k _
 
 
 \paragraph{Forwarding}
@@ -429,22 +438,15 @@ between sources and sinks, while not restricting the programs one can
 write.
 Indeed, one can access the underlying structure as follows:
 
-> onSource   :: (Src  a ⊸ t) ⊸ Source   a ⊸ t
-> onSink     :: (Snk  a ⊸ t) ⊸ Sink     a ⊸ t
 
-> onSource  f   s = f   (\t -> forward s t)
-> onSink    f   t = f   (\s -> forward s t)
 
 And, while a negated \var{Sink} cannot be converted to a
 \var{Source}, all the following conversions are implementable:
 
-> unshiftSnk :: N (Src a) ⊸ Snk a
-> unshiftSrc :: N (Snk a) ⊸ Src a
 > shiftSnk :: Snk a ⊸ N (Src a)
 > shiftSrc :: Src a ⊸ N (Snk a)
 
-> unshiftSnk = onSource
-> unshiftSrc = onSink
+
 > shiftSnk k kk = kk (Cont k)
 > shiftSrc k kk = k (Cont kk)
 
@@ -458,10 +460,9 @@ In particular, one can flip sink transformers to obtain source transformers,
 and vice versa.
 
 > flipSnk :: (Snk a ⊸ Snk b) ⊸ Src b ⊸ Src a
-> flipSnk f s = shiftSrc s . onSink f
+> flipSnk f s (Cont k) = s $ Cont $ (f k)
 
-> flipSrc :: (Src a ⊸ Src b) ⊸ Snk b ⊸ Snk a
-> flipSrc f t = shiftSnk t . onSource f
+FIXME flipSrc
 
 
 Flipping allows to choose the most convenient direction to
@@ -559,11 +560,6 @@ Algebraic structure
 -------------------
 
 Source and sinks form a (linear) monoid under concatenation:
-
-< class Monoid a where
-<   mempty :: a
-<   mappend :: a ⊸ a ⊸ a
-
 
 > instance Monoid (Src a) where
 >   mappend = appendSrc
@@ -753,8 +749,8 @@ succeeds first, and that which fails as last resort:
 > weave :: P s a -> P s a -> P s a
 > weave Fail x = x
 > weave x Fail = x
-> weave (Result res) y = Result res
-> weave x (Result res) = Result res
+> weave (Result res) _ = Result res
+> weave _ (Result res) = Result res
 > weave (Sym k1) (Sym k2)
 >     = Sym (\s -> weave (k1 s) (k2 s))
 
@@ -1012,14 +1008,14 @@ We call the structure that we are looking for a
 that producing $N a$ is equivalent to consuming $a$, thus a sink of $N
 a$ is a (different kind of) source of $a$. We define:
 
-> type CoSrc a = Snk (N a)
+> type CoSrc a = NN (Snk (N a))
 > type CoSnk a = Src (N a)
 
 Implementing multiplexing on co-sources is then straightforward, by
 leveraging \var{dmux'}:
 
 > mux' :: CoSrc a ⊸ CoSrc b ⊸ CoSrc (a & b)
-> mux' sa sb = unshiftSnk $ \tab -> dmux' (nnElim tab) sa sb
+> mux' sa sb tab = _
 
 
 We use the rest of the section to study the property of co-sources and
@@ -1327,8 +1323,8 @@ using the following effect-free function, which forwards everything
 sent to a sink to its two argument sinks.
 
 > collapseSnk :: (a ⊸ (b,c)) -> Snk b ⊸ Snk c ⊸ Snk a
-> collapseSnk dup t1 t2 Nil = t1 Nil <> t2 Nil
-> collapseSnk dup t1 t2 (Cons x xs)
+> collapseSnk _    t1 t2 Nil = t1 Nil <> t2 Nil
+> collapseSnk dup  t1 t2 (Cons x xs)
 >   =  t1  (Cons y $ \c1 ->
 >      t2  (Cons z $ \c2 ->
 >          shiftSrc xs (collapseSnk dup  (flip forward c1)
