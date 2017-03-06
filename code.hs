@@ -56,6 +56,9 @@ mapSnk' f snk (Cons a s) = snk (Cons (f a) (mapSrc f s))
 mapSrc  :: (a ⊸ b) -> Src  a ⊸ Src  b
 mapSrc f = flipSnk' (mapSnk' f)
 
+mapSnk ::  (b ⊸ a) -> Snk  a ⊸ Snk  b
+mapSnk f = flipSrc (mapSrc f)
+
 nnIntro' :: Snk' a -> Snk' (NN a)
 nnIntro' k Nil = k Nil
 nnIntro' k (Cons x xs) = x $ \x' -> k (Cons x' $ nnElim xs)
@@ -138,11 +141,11 @@ class Drop a where drop :: a ⊸ b ⊸ b
 
 zipSrc :: (Drop a, Drop b) => Src a ⊸ Src b ⊸ Src (a,b)
 forkSnk' :: (Drop a, Drop b) => Snk' (a,b) ⊸ Src a ⊸ Snk' b
-forkSrc :: Src (a,b) ⊸ Snk' a ⊸ Src b
+forkSrc :: Src (a,b) ⊸ Snk a ⊸ Src b
 zipSnk' :: Snk' a ⊸ Snk' b ⊸ Snk' (a,b)
 scanSrc :: (b -> a -> (b,c)) -> b -> Src a ⊸ Src c
 scanSnk' :: (b -> a -> (b,c)) -> b -> Snk' c ⊸ Snk' a
-foldSrc' :: (b -> a -> b) -> b -> Src a ⊸ NN b
+foldSrc :: (b -> a -> b) -> b -> Src a ⊸ NN b
 foldSnk' :: (b -> a -> b) -> b -> N b ⊸ Snk' a
 dropSrc :: Drop a => Int -> Src a ⊸ Src a
 dropSnk' :: Drop a => Int -> Snk' a ⊸ Snk' a
@@ -163,13 +166,18 @@ zipSnk a b c = a $ \a' -> b $ \b' -> zipSnk (shift a') (shift b') c
 scanSnk :: (b -> a -> (b,c)) -> b -> Snk c ⊸ Snk a
 scanSnk f z = flipSrc (scanSrc f z)
 chunkSnk :: Snk a ⊸ Snk [a]
-chunkSnk = flipSrc unchunk
 filterSnk :: (a ⊸ Maybe b) ⊸ Snk b ⊸ Snk a
-filterSnk p = flipSrc (filterSrc p)
 unlinesSnk :: Snk String ⊸ Snk Char
-unlinesSnk = flipSrc linesSrc 
 interleaveSnk :: Snk a ⊸ Src a ⊸ Snk a
 interleaveSnk a b = flipSrc (interleave b) a
+chunkSnk = flipSrc unchunk
+unlinesSnk = flipSrc linesSrc 
+filterSnk p = flipSrc (filterSrc p)
+foldSnk :: (b -> a -> b) -> b -> N b ⊸ Snk a
+foldSnk f z nb src = foldSrc f z src nb
+
+untilSnk :: Drop a => (a -> Bool) ⊸ Snk a
+untilSnk p src = src (Cont (untilSnk' p))
 
 data P s res  =  Sym (Maybe s -> P s res)
               |  Fail
@@ -240,8 +248,8 @@ fileSrc file sink = do
   h <- openFile file ReadMode
   hFileSrc h sink
 copyFile :: FilePath -> FilePath -> Eff
-copyFile source target = fwd' (fileSrc source)
-                             (fileSnk' target)
+copyFile source target = fwd (fileSrc source)
+                             (fileSnk target)
 read3Lines :: Eff
 read3Lines = fwd' (hFileSrc stdin)
                  (takeSnk' 3 $ fileSnk' "text.txt")
@@ -393,8 +401,13 @@ varBuffer a f g = do
   forkIO $ f (varCoSnk c)
   varSrc c g
 
-flipBuffer :: (forall a. CoSrc a ⊸ Src a) -> Snk' b ⊸ CoSnk b
-flipBuffer f s = f (flip fwd' (nnIntro s))
+flipBuffer' :: (forall a. CoSrc a ⊸ Src a) -> Snk' b ⊸ CoSnk b
+flipBuffer' f s = f (shift (Cont (nnIntro s)))
+
+flipBuffer :: (forall a. CoSrc a ⊸ Src a) -> Snk b ⊸ CoSnk b
+flipBuffer f s = f (s . nnElim)
+-- flipBuffer f s t = (flipSrc nnElim s) $ \x -> f (\y -> y t) _
+  -- f (shift (Cont (flipSrc nnElim s)))
 
 type Client a = (CoSrc a, Snk' a)
 bufferedDmux :: CoSrc a ⊸ CoSrc a ⊸ Src a
@@ -404,18 +417,23 @@ bufferedDmux s1 s2 t = do
   forkIO $ s2 (chanCoSnk c)
   chanSrc c t
 
-tee :: (a ⊸ (b, c)) -> Src a -> Sink b -> Src c
-tee deal s1 t1 Full = s1 Full <> empty t1
-tee deal s1 Full t2 = s1 Full <> empty t2
-tee deal s1 (Cont t1) (Cont t2) = s1 $ Cont $ collapseSnk' deal t1 t2
+tee' :: (a ⊸ (b, c)) -> Src a -> Sink b -> Src c
+tee' deal s1 t1 Full = s1 Full <> empty t1
+tee' deal s1 Full t2 = s1 Full <> empty t2
+tee' deal s1 (Cont t1) (Cont t2) = s1 $ Cont $ collapseSnk' deal t1 t2
 
 collapseSnk' :: (a ⊸ (b,c)) -> Snk' b ⊸ Snk' c ⊸ Snk' a
 collapseSnk' _    t1 t2 Nil = t1 Nil <> t2 Nil
 collapseSnk' dup  t1 t2 (Cons x xs)
   =  t1  (Cons y $ \c1 ->
-     t2  (Cons z $ tee dup xs c1))
+     t2  (Cons z $ tee' dup xs c1))
   where (y,z) = dup x
 
+tee :: (a ⊸ (b, c)) -> Src a -> Snk b -> Src c
+tee f s t1 t2 = t1 $ \t -> tee' f s t t2
+
+collapseSnk :: (a ⊸ (b,c)) -> Snk b ⊸ Snk c ⊸ Snk a
+collapseSnk f t1 t2 s = t2 (tee f s t1)
 
 server :: (a ⊸ (a,a)) ⊸ Client a ⊸ Client a ⊸ Eff
 server dup (i1,o1) (i2,o2) = (bufferedDmux i1 i2)
@@ -436,11 +454,14 @@ zipSrc s1 s2 Full = s1 Full <> s2 Full
 zipSrc s1 s2 (Cont k) = s1 $ Cont $ \sa -> 
                         s2 $ Cont $ \sb -> zipSource sa sb k
 
+forkSnk :: (Drop a, Drop b) => Snk (a,b) ⊸ Src a ⊸ Snk b
+forkSnk t s1 s2 = t (zipSrc s1 s2)
+
 forkSnk' sab ta tb = ta $ Cont $ \ta' ->
                     zipSource ta' tb sab
 
 zipSnk' ta tb sab = forkSource sab ta tb
-
+ 
 forkSource :: Source (a,b) ⊸ N (Source a) ⊸ N (Source b) ⊸ Eff
 forkSource Nil t1 t2 = t1 Nil <> t2 Nil
 forkSource (Cons (a,b) xs) t1 t2 = t1 $ Cons a $ \sa' ->
@@ -450,7 +471,7 @@ forkSrc' sab Full tb = empty tb <> sab Full
 forkSrc' sab tb Full = empty tb <> sab Full
 forkSrc' sab (Cont ta) (Cont tb) = sab $ Cont $ \sab' -> forkSource sab' ta tb
 
-forkSrc sab ta tb = forkSrc' sab (Cont ta) tb
+forkSrc sab ta tb = ta $ \x -> forkSrc' sab x tb
 
 scanSrc _  _ src Full = src Full
 scanSrc f !z src (Cont k) = src $ Cont (scanSnk' f z k)
@@ -460,12 +481,15 @@ scanSnk' f z snk (Cons a s)   = snk $  Cons y $
                                       scanSrc f next s
   where (next,y) = f z a
 
-foldSrc' f !z s nb = s (Cont (foldSnk' f z nb))
+foldSrc f !z s nb = s (Cont (foldSnk' f z nb))
 foldSnk' _ z nb Nil = nb z
-foldSnk' f z nb (Cons a s) = foldSrc' f (f z a) s nb
+foldSnk' f z nb (Cons a s) = foldSrc f (f z a) s nb
 
 dropSrc _ s Full = s Full
 dropSrc i s (Cont k) = s $ Cont $ dropSnk' i k
+
+dropSnk i = flipSrc (dropSrc i)
+
 
 dropSnk' 0 s s' = s s'
 dropSnk' _ s Nil = s Nil
