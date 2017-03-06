@@ -43,11 +43,11 @@ A novelty of our implementation is that it allows to locally introduce
 buffering or re-scheduling of effects. The buffering requirements (or
 re-scheduling opportunities) are indicated by the type-system.
 
-Our library is based on a number of design principles, adapted from
-the theory of Girard's Linear Logic. These principles are applicable
-to the design of any Haskell structure where resource management
-(memory, IO, ...) is critical.
-\end{abstract}
+Our additionally serves to expand the corpus of effectful programs and
+libraries written in functional programming languages with linear
+types. Our aim is to present principles which are applicable to the
+design of libraries and programs where resource management (memory,
+IO, ...) is critical.  \end{abstract}
 
 \keywords
 Streams, Continuations, Linear Types
@@ -118,14 +118,13 @@ this effect compounds badly with the first issue discussed above (unpredicatbili
 one wants to use lazy effectful computations, again, the
 compositionality principle is lost.
 
-In this paper, we propose to tackle both of these issues by taking advantage of
-linear types.
-In fact, one way to read this
-paper is as an advocacy for linear types support in Haskell. While
-Kiselyov's *iteratees* (\citeyear{kiselyov_iteratees_2012}) already
-solves the issues described above, our grounding in linear logic
-yields a rich structure for types for data streams, capturing
-various production and consumption patterns.
+In this paper, we propose to tackle both of these issues by taking
+advantage of linear types.  In fact, one way to read this paper is as
+an advocacy for linear types support in Haskell. While Kiselyov's
+*iteratees* (\citeyear{kiselyov_iteratees_2012}) already solves the
+issues described above, our grounding in linear logic yields a rich
+structure for types for data streams, capturing various production and
+consumption patterns.
 
 First, the type corresponding to on-demand production of elements is called a
 source (\var{Src}). An adaptation of the first code example above to
@@ -426,7 +425,7 @@ write. A benefit of the above definitions is that it becomes
 possible to forward data from \var{Src} to \var{Snk}:
 
 > fwd :: Src a ⊸ Snk a ⊸ Eff
-> fwd k kk = k (Cont kk)
+> fwd s t = s (Cont t)
 
 Additionally, one can flip sink transformers to obtain source
 transformers:
