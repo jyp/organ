@@ -25,7 +25,7 @@ unshift k x = k (shift x)
 type Eff = IO ()
 type a & b = N (Either (N a) (N b))
 type Src   a = N  (Sink a)
-type Snk  a = N  (Source a)
+type Snk   a = N  (Source a)
 
 await :: Source a ⊸ (Eff & (a -> Source a ⊸ Eff)) ⊸ Eff
 await Nil r = r $ Left $ \eof -> eof
@@ -35,30 +35,23 @@ yield :: a -> Sink a ⊸ (Sink a ⊸ Eff) ⊸ Eff
 yield _ Full k = k Full
 yield x (Cont c) k = c (Cons x k)
 
+fwd :: forall t a. (Sink a -> t) -> N (Source a) -> t
 fwd s t = s (Cont t)
 
-flop :: (a ⊸ b) ⊸ (N b ⊸ N a)
-flop f b a = b (f a)
-
-flipSource :: (Source a ⊸ Source b) ⊸ Sink b ⊸ Sink a
-flipSource f Full = Full
-flipSource f (Cont k) = Cont (k . f)
-
-flipSink :: (Sink a ⊸ Sink b) ⊸ Src b ⊸ Src a
-flipSink = flop
-
-flipSnk :: (Snk a ⊸ Snk b) ⊸ Src b ⊸ Src a
-flipSnk f s Full = s Full
+flipSnk :: (Snk a ⊸ Snk b) -> Src b ⊸ Src a
+flipSnk _ s Full = s Full
 flipSnk f s (Cont k) = s (Cont (f k))
 
-mapSrc  :: (a ⊸ b) -> Src  a ⊸ Src  b
-mapSink  :: (b ⊸ a) -> Sink  a ⊸ Sink  b
-mapSource  :: (a ⊸ b) -> Source a ⊸ Source b
-mapSrc f = flipSink (mapSink f)
-mapSink f = flipSource (mapSource f)
-mapSource _ Nil = Nil
-mapSource f (Cons x xs) = Cons (f x) (mapSrc f xs)
+mapSnk  :: (b ⊸ a) -> Snk  a ⊸ Snk  b
+mapSnk _ snk Nil = snk Nil
+mapSnk f snk (Cons a s) = snk (Cons (f a) (mapSrc f s))
 
+mapSrc  :: (a ⊸ b) -> Src  a ⊸ Src  b
+mapSrc f = flipSnk (mapSnk f)
+
+nnIntro' :: Snk a -> Snk (NN a)
+nnIntro' k Nil = k Nil
+nnIntro' k (Cons x xs) = x $ \x' -> k (Cons x' $ nnElim xs)
 
 nnIntro :: Snk a ⊸ Snk (NN a)
 nnIntro = flip nnElimSource
@@ -67,12 +60,13 @@ nnElimSource :: Source (NN a) ⊸ N (Source a) ⊸ Eff
 nnElimSource Nil s = s Nil
 nnElimSource (Cons x xs) s = x $ \x' -> s (Cons x' (nnElim xs))
 
-nnIntro' :: Sink a ⊸ Sink (NN a)
-nnIntro' Full = Full
-nnIntro' (Cont k) = Cont $ \s -> nnElimSource s k
-
 nnElim :: Src (NN a) ⊸ Src a
-nnElim = flipSink nnIntro'
+nnElim = flipSnk nnIntro'
+
+unshiftSrc :: N (Snk a) -> Src a
+unshiftSrc k Full = k plug
+unshiftSrc k (Cont kk) = _
+
 
 empty :: Src a
 empty Full = mempty
@@ -82,13 +76,13 @@ cons :: a -> Src a ⊸ Src a
 cons a s s' = yield a s' s
 
 takeSrc  :: Int -> Src  a -> Src  a
-takeSink  :: Int -> Sink  a -> Sink  a
+takeSnk  :: Int -> Snk  a -> Snk  a
 
 takeSrc 0 s snk = s Full <> empty snk
-takeSrc n s snk = flipSink (takeSink n) s snk
-takeSink n = flipSource (takeSource n)
-takeSource _ Nil = Nil
-takeSource n (Cons a as) = Cons a (takeSrc (n-1) as)
+takeSrc n s snk = flipSnk (takeSnk n) s snk
+
+takeSnk _ s Nil = s Nil
+takeSnk i s (Cons a s') = s (Cons a (takeSrc (i-1) s'))
 
 
 instance Monoid (Src a) where
@@ -114,7 +108,7 @@ forwardThenSrc :: Snk a -> Src a -> Src a
 forwardThenSrc s2 = flipSnk (appendSnk s2)
 
 
-{-
+
 (-?) :: Snk a ⊸ Src a ⊸ Snk a
 t -? s = forwardThenSnk t s
 (-!) :: Snk a ⊸ Src a ⊸ Src a
@@ -123,7 +117,7 @@ infixr -!
 infixl -?
 prop_diff3 t1 t2 s = (t1 <> t2) -? s == t1 -? (t2 -! s)
 prop_diff4 t s1 s2 = t -! (s1 <> s2) == (t -? s1) -! s2
--}
+
 
 class Drop a where drop :: a ⊸ b ⊸ b
 
@@ -176,7 +170,7 @@ parse _ src Full = src Full
 parse q@(P p0) src (Cont k) = scan (p0 $ \x -> Result x) k src
  where
   scan :: P s a -> Snk a ⊸ Src s ⊸ Eff
-  scan (Result res  )  ret        xs     = ret (Cons res $ \snk -> parse q xs (Cont ret))
+  scan (Result res  )  ret        xs     = ret (Cons res (parse q xs))
   scan Fail            ret        xs     = ret Nil <> xs Full
   scan (Sym f)         mres       xs     = xs $ Cont $ \case
     Nil        -> scan (f Nothing) mres empty
@@ -188,8 +182,8 @@ hFileSnk h (Cons c s) = do
   hPutStrLn h c
   s (Cont (hFileSnk h))
 
-fileSink :: FilePath -> Sink String
-fileSink file = Cont $ \s -> do
+fileSnk :: FilePath -> Snk String
+fileSnk file s = do
   h <- openFile file WriteMode
   hFileSnk h s
 
@@ -210,11 +204,11 @@ fileSrc file sink = do
   h <- openFile file ReadMode
   hFileSrc h sink
 copyFile :: FilePath -> FilePath -> Eff
-copyFile source target = (fileSrc source)
-                         (fileSink target)
+copyFile source target = fwd (fileSrc source)
+                             (fileSnk target)
 read3Lines :: Eff
-read3Lines = (hFileSrc stdin)
-             (takeSink 3 $ fileSink "text.txt")
+read3Lines = fwd (hFileSrc stdin)
+                 (takeSnk 3 $ fileSnk "text.txt")
 
 hFileSrcSafe :: Handle -> Src String
 hFileSrcSafe h Full = hClose h
@@ -233,11 +227,11 @@ hFileSrcSafe h (Cont c) = do
 dmux' :: Src (Either a b) -> Sink a -> Sink b -> Eff
 dmux' sab Full tb = sab Full <> empty tb
 dmux' sab ta Full = sab Full <> empty ta
-dmux' sab (Cont ta) (Cont tb) = sab $ Cont $ \s -> dmux s ta tb
+dmux' sab (Cont ta) (Cont tb) = sab $ Cont $ \s -> dmux ta tb s
 
-dmux :: Source (Either a b) -> N (Source a) -> N (Source b) -> Eff
-dmux Nil ta tb = ta Nil <> tb Nil
-dmux (Cons ab c) ta tb = case ab of
+dmux :: Snk a -> Snk b -> Snk (Either a b)
+dmux ta tb Nil = ta Nil <> tb Nil
+dmux ta tb (Cons ab c) = case ab of
   Left a -> ta (Cons a $ \ta' -> dmux' c ta' (Cont tb))
   Right b -> tb (Cons b $ \tb' -> dmux' c (Cont ta) tb')
 
@@ -260,8 +254,10 @@ mux' sa sb tab = sa $ \sa' -> sb $ \sb' -> dmux' (nnElim tab) sa' sb'
 mapCoSnk :: (b ⊸ a) -> CoSnk a ⊸ CoSnk b
 mapCoSnk f = mapSrc (\b' -> \a -> b' (f a))
 
+mapCoSrc  :: (a ⊸ b) -> CoSrc a ⊸ CoSrc b
+mapCoSrc f snk src = snk (mapCoSnk f src)
 
-coToList :: N (Source (N a)) -> NN [a]
+coToList :: Snk (N a) -> NN [a]
 coToList k1 k2 = k1 $ Cons (\a -> k2 [a]) (error "rest")
 coToList k1 k2 = k2 $ (error "a?") : (error "rest")
 
@@ -283,11 +279,12 @@ coFileSink h (Cont c) = c (Cons  (hPutStrLn h)
                                  (coFileSink h))
 
 srcToCoSrc :: Schedule a -> Src a ⊸ CoSrc a
-srcToCoSrc strat s0 s = s0 $ Cont $ \s0' -> strat s0' s
 coSnkToSnk :: Schedule a -> CoSnk a ⊸ Snk a
+
+srcToCoSrc strat s0 s = fwd s0 (flip strat s)
+coSnkToSnk strat s0 s = strat s s0
 type Schedule a = Source a ⊸ Src (N a) ⊸ Eff
 
-coSnkToSnk strat s0 s = strat s s0
 sequentially :: Drop a => Schedule a
 sequentially Nil s = s Full
 sequentially (Cons x xs) s = s $ Cont $ \s' -> case s' of
@@ -358,7 +355,7 @@ varBuffer a f g = do
   varSrc c g
 
 flipBuffer :: (forall a. CoSrc a ⊸ Src a) -> Snk b ⊸ CoSnk b
-flipBuffer f s = f (\t -> t $ Cont $ nnIntro s)
+flipBuffer f s = f (flip fwd (nnIntro s))
 
 type Client a = (CoSrc a, Snk a)
 bufferedDmux :: CoSrc a ⊸ CoSrc a ⊸ Src a
@@ -417,7 +414,7 @@ forkSrc' sab (Cont ta) (Cont tb) = sab $ Cont $ \sab' -> forkSource sab' ta tb
 
 forkSrc sab ta tb = forkSrc' sab (Cont ta) tb
 
-scanSrc f !z src Full = src Full
+scanSrc _  _ src Full = src Full
 scanSrc f !z src (Cont k) = src $ Cont (scanSnk f z k)
 
 scanSnk _ _ snk Nil          = snk Nil
@@ -437,18 +434,13 @@ dropSnk _ s Nil = s Nil
 dropSnk i s (Cons x s') = drop x (dropSrc (i-1) s' (Cont s))
 
 fromList = foldr cons empty
-{-
+
 enumFromToSrc :: Int -> Int -> Src Int
 enumFromToSrc _ _ Full = mempty
 enumFromToSrc b e (Cont s)
   | b > e     = s Nil
   | otherwise = s (Cons b (enumFromToSrc (b+1) e))
-enumFromToSrc' :: Int -> Int -> CoSrc Int
-enumFromToSrc' _ _ Nil = mempty
-enumFromToSrc' from to (Cons x xs) = do
-  x from
-  let !from' = from+1
-  shiftSnk (enumFromToSrc' from' to) xs-}
+
 linesSrc = flipSnk unlinesSnk
 unlinesSnk = unlinesSnk' []
 
