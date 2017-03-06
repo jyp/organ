@@ -404,6 +404,7 @@ bufferedDmux s1 s2 t = do
   forkIO $ s2 (chanCoSnk c)
   chanSrc c t
 
+tee :: (a ⊸ (b, c)) -> Src a -> Sink b -> Src c
 tee deal s1 t1 Full = s1 Full <> empty t1
 tee deal s1 Full t2 = s1 Full <> empty t2
 tee deal s1 (Cont t1) (Cont t2) = s1 $ Cont $ collapseSnk' deal t1 t2

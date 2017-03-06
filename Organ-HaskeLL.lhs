@@ -418,6 +418,7 @@ introduce negated variants of source and sink types.
 
 > type Src   a = N  (Sink a)
 > type Snk   a = N  (Source a)
+> type Snk'  a = N (Source a)
 
 These definitions have the added advantage to perfect the duality
 between sources and sinks, while not restricting the programs one can
@@ -488,7 +489,8 @@ To begin, we show that one can implement a list-like API for
 sources, as follows:
 
 > empty :: Src a
-> empty sink' = forward Nil sink'
+> empty Full = mempty
+> empty (Cont k) = k Nil
 
 > cons :: a -> Src a ⊸ Src a
 > cons a s s' = yield a s' s
@@ -529,7 +531,7 @@ Source form a (linear) monoid under concatenation:
 
 > instance Monoid (Snk a) where
 >   mappend = appendSnk
->   mempty = plug
+>   mempty = _
 
 We have already encountered the units (\var{empty} and \var{plug});
 the appending operations are defined below.  Intuitively,
@@ -630,7 +632,7 @@ Equivalent of \var{foldl'} for sources, and the dual.
 Drop some elements from a source, and the dual.
 
 > dropSrc :: Drop a => Int -> Src a ⊸ Src a
-> dropSnk :: Drop a => Int -> Snk a ⊸ Snk a
+> dropSnk' :: Drop a => Int -> Snk a ⊸ Snk a
 
 Convert a list to a source, and vice versa.
 
@@ -656,7 +658,7 @@ Interleave two sources, and the dual.
 Forward data coming from the input source to the result source and to
 the second argument sink.
 
-> tee :: (a ⊸ (b,c)) -> Src a ⊸ Snk b ⊸ Src c
+-- > tee' :: (a ⊸ (b,c)) -> Src a ⊸ Snk b ⊸ Src c
 
 Filter a source, and the dual.
 
@@ -728,13 +730,12 @@ the stream are closed.
 > parse :: forall s a. Parser s a -> Src s ⊸ Src a
 > parse q@(P p0) = flipSnk $ scan $ p0 $ \x -> Result x
 >  where
->   scan :: P s a -> Snk a ⊸ Snk s
->   scan (Result res  )  ret        xs     = ret
->        (Cons res $ parse q $ forward xs)
->   scan Fail            ret        xs     = ret Nil <> forward xs Full
->   scan (Sym f)         mres       xs     = case xs of
->     Nil        -> scan (f Nothing) mres Nil
->     Cons x cs  -> fwd cs (scan (f $ Just x) mres)
+>  scan :: P s a -> Snk' a ⊸ Src s ⊸ Eff
+>  scan (Result res  )  ret        xs     = ret (Cons res (parse q xs))
+>  scan Fail            ret        xs     = ret Nil <> xs Full
+>  scan (Sym f)         mres       xs     = xs $ Cont $ \case
+>    Nil        -> scan (f Nothing) mres empty
+>    Cons x cs  -> scan (f $ Just x) mres cs
 
 
 
@@ -1083,7 +1084,7 @@ match the consumptions/productions element-wise, as follows.
 > sequentially (Cons x xs) s = s $ Cont $ \s' -> case s' of
 >   Cons x' xs' -> do
 >     x' x
->     shiftSrc xs $ \sa -> sequentially sa xs'
+>     xs $ Cont $ \t -> sequentially t xs'
 >   Nil -> drop x (xs Full)
 
 
@@ -1099,15 +1100,14 @@ is confident that execution order does not matter), one can shuffle
 the order of execution of effects. This re-ordering can be taken
 advantage of to run effects concurrently, as follows:
 
+
 > concurrently :: Drop a => Schedule a
 > concurrently Nil s = s Full
 > concurrently (Cons x xs) s = s $ Cont $ \s' -> case s' of
 >   Cons x' xs' -> do
->       forkIO (x' x)
->       shiftSrc xs $ \sa -> sequentially sa xs'
+>     forkIO (x' x)
+>     xs $ Cont $ \t -> concurrently t xs'
 >   Nil -> drop x (xs Full)
-
-
 
 The above strategy is useful if the production or consumption
 of elements is expensive and distributable over computation units.
@@ -1280,21 +1280,23 @@ We then have to send each message to both clients. This may be done
 using the following effect-free function, which forwards everything
 sent to a sink to its two argument sinks.
 
-> collapseSnk :: (a ⊸ (b,c)) -> Snk b ⊸ Snk c ⊸ Snk a
-> collapseSnk _    t1 t2 Nil = t1 Nil <> t2 Nil
-> collapseSnk dup  t1 t2 (Cons x xs)
+> collapseSnk' :: (a ⊸ (b,c)) -> Snk' b ⊸ Snk' c ⊸ Snk' a
+> collapseSnk' _    t1 t2 Nil = t1 Nil <> t2 Nil
+> collapseSnk' dup  t1 t2 (Cons x xs)
 >   =  t1  (Cons y $ \c1 ->
->      t2  (Cons z $ \c2 ->
->          shiftSrc xs (collapseSnk dup  (flip forward c1)
->                                        (flip forward c2))))
+>      t2  (Cons z $ tee' dup xs c1))
 >   where (y,z) = dup x
 
+> tee' :: (a ⊸ (b, c)) -> Src a -> Sink b -> Src c
+> tee' deal s1 t1 Full = s1 Full <> empty t1
+> tee' deal s1 Full t2 = s1 Full <> empty t2
+> tee' deal s1 (Cont t1) (Cont t2) = s1 $ Cont $ collapseSnk' deal t1 t2
 
 The server can then be defined by composing the above two functions.
 
 > server :: (a ⊸ (a,a)) ⊸ Client a ⊸ Client a ⊸ Eff
 > server dup (i1,o1) (i2,o2) = fwd  (bufferedDmux i1 i2)
->                                   (collapseSnk dup o1 o2)
+>                                   (collapseSnk' dup o1 o2)
 
 
 
@@ -1576,19 +1578,11 @@ Table of Functions: implementations
 > foldSnk' _ z nb Nil = nb z
 > foldSnk' f z nb (Cons a s) = foldSrc' f (f z a) s nb
 
-Return the last element of the source, or the first argument if the
-source is empty.
+> dropSrc i = flipSnk (dropSnk' i)
 
-> lastSrc :: a -> Src a -> NN a
-> lastSrc x s k = shiftSrc s $ \s' -> case s' of
->   Nil -> k x
->   Cons x' cs -> lastSrc x' cs k
-
-> dropSrc i = flipSnk (dropSnk i)
-
-> dropSnk 0 s s' = s s'
-> dropSnk _ s Nil = s Nil
-> dropSnk i s (Cons x s') = drop x (shiftSrc (dropSrc (i-1) s') s)
+> dropSnk' 0 s s' = s s'
+> dropSnk' _ s Nil = s Nil
+> dropSnk' i s (Cons x s') = drop x (dropSrc (i-1) s' (Cont s))
 
 > fromList = foldr cons empty
 
@@ -1621,7 +1615,7 @@ source is empty.
 > interleaveSnk snk src (Cons a s)
 >   = snk (Cons a (interleave s src))
 
-> tee deal s1 t1 = flipSnk (collapseSnk deal t1) s1
+-- > tee deal s1 t1 = flipSnk (collapseSnk' deal t1) s1
 
 > filterSrc p = flipSnk (filterSnk p)
 
@@ -1636,7 +1630,8 @@ source is empty.
 > chunkSnk s (Cons x xs)
 >   = fwd (fromList x `appendSrc` unchunk xs) s
 
-> toList s k = shiftSrc s (toListSnk k)
+> toList s k = s (Cont $ toListSnk k)
+
 
 > toListSnk :: N [a] -> Snk a
 > toListSnk k Nil = k []
