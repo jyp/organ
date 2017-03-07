@@ -612,9 +612,10 @@ Table of effect-free functions
 The above gives already an extensive API for sources and sinks, many
 more useful effect-free functions can be implemented on this basis. We
 give here a menu of functions that we have implemented, and whose
-implementation is available in the appendix.
+implementation is available online\footnote{https://github.com/jyp/organ/blob/master/Organ-HaskeLL.lhs}.
 
-Zip two sources, and the dual.
+Two sources can be zipped if some extra left-over elements can be
+dropped. Equivalently, a sink can be forked in the same situation.
 
 > class Drop a where drop :: a ⊸ b ⊸ b
 
@@ -1638,8 +1639,6 @@ Table of Functions: implementations
 > interleaveSnk' snk src Nil = src (Cont snk)
 > interleaveSnk' snk src (Cons a s)
 >   = snk (Cons a (interleave s src))
-
--- > tee deal s1 t1 = flipSnk (collapseSnk' deal t1) s1
 
 > filterSrc p = flipSnk (filterSnk' p)
 
