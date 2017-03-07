@@ -20,9 +20,9 @@ clean:
 	lhs2TeX < $*.md.lhs | ./CleanTex.tool >$@
 
 %.pdf: %.tex PaperTools/bibtex/jp.short.bib
-	pdflatex $*
-	bibtex $*
-	pdflatex $*
+	pdflatex $*.tex
+	bibtex $*.aux
+	pdflatex $*.tex
 
 gist:
 	cp Organ.lhs ../fadd6e8a2a0aa98ae94d
