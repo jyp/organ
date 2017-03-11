@@ -109,7 +109,7 @@ resources, and thus swapping them should have no observable effect.
 However, while the first program prints the `foo` file, the second one
 prints nothing.  Indeed, because \var{hGetContents} reads the file
 lazily, the \var{hClose} operation has the effect to truncate the
-list. In the first program, printing the contents force reading the
+list. In the first program, printing the contents forces reading the
 file. One may argue that \var{hClose} should not be called in the
 first place --- but then, closing the handle happens only when the
 \var{contents} list can be garbage collected (in full), and relying on
@@ -120,35 +120,35 @@ compositionality principle is lost.
 
 In this paper, we propose to tackle both of these issues by taking
 advantage of linear types.  One way to read this paper is as
-an advocacy for linear types support in Haskell. Indeed, while Kiselyov's
-*iteratees* (\citeyear{kiselyov_iteratees_2012}) already solves the
-issues described above, our grounding in linear logic yields a rich
-structure for types for data streams, capturing various production and
-consumption patterns.
+an advocacy for linear types support in Haskell. Indeed, even though
+one can tackle the above issues by using Monad-based libraries
+\citep{kiselyov_iteratees_2012} our linear-logic-based types naturally capture
+a wealth of useful production and consumption patterns.
 
-First, the type corresponding to on-demand production of elements is called a
+The first noteworthy type, corresponding to on-demand production of elements, is called a
 source (\var{Src}). An adaptation of the first code example above to
-use sources would look as follows, and give the guarantee that the
-composition does not allocate more memory than the sum of its
-components.
+use sources would look as follows.
 
 < f :: Src a ⊸ Src b
 < g :: Src b ⊸ Src c
 < h = g . f
 
-Second, the type driving the consumption of elements is called a sink
+Thanks to type-checking, we get the guarantee that the
+composition does not allocate more memory than the sum of its
+components. The second useful type, driving the consumption of elements, is called a sink
 (\var{Snk}).  For example, the standard output is naturally given a
 sink type:
 
 < stdoutSnk :: Snk String
 
-Using it, we can implement the printing of a file as follows, and
-guarantee the timely release of resources, even in the presence of
-exceptions:
+Using it, we can implement the printing of a file as follows.
 
 > main = fileSrc "foo" `fwd` stdoutSnk
 
-In the above \var{fileSrc} provides the contents of a file, and
+Beyond frugal memory usage, we have the
+guarantee of a timely release of resources, even in the presence of
+exceptions.
+In the above, \var{fileSrc} provides the contents of a file, and
 \var{fwd} forwards data from a source to a sink.  The types are as
 follows:
 
@@ -185,7 +185,7 @@ linearity and polarization. While these principles are borrowed
 from linear logic, as far as we know they have not been applied to
 Haskell programming before.
 
-* An embodiment of the above principles, in the form of a Hask-LL\footnote{Hask-LL is an extension of Haskell to linear types fully described by~\citet{bernardy_retrofitting_2017}. For the purposes of this paper, the main addition is the linear arrow (⊸) for functions which guarantee to consume their argument exactly once. Pairs also become linear.}
+* An embodiment of the above principles, in the form of a Hask-LL\footnote{Hask-LL is an extension of Haskell to linear types fully described by \citet{bernardy_retrofitting_2017}. For the purposes of this paper, the main addition is the linear arrow (⊸) for functions which guarantee to consume their argument exactly once. Pairs also become linear.}
 library for streaming `IO`.
 Besides supporting compositionality as
 outlined above, our library features two concrete novel aspects:
@@ -227,7 +227,7 @@ A shortcut for double negations is also convenient.
 The basic idea (imported from classical logic) pervading this paper
 is that in the presence of effects, producing a result of type α is equivalent to consuming an
 argument of type $N α$. Dually, consuming an argument of type α is
-equivalent to producing a result of type $N α$. In this paper we call
+equivalent to producing a result of type $N α$. We call
 these equivalences the duality principle.
 
 In classical logic, negation is involutive; that is: $\var{NN}\,α = α$.
@@ -254,8 +254,8 @@ double negation monad\footnote{for \var{join}, substitute $N\,a$ for
 $a$ in the type of \var{unshift}}; indeed adding a double negation in
 the type corresponds to sending the return value to its
 consumer. However, we will not be using this monadic structure
-anywhere in the following. Indeed, single negations play a central
-role in our approach, and thus the monadic structure is a mere diversion.
+anywhere in the following, because single negations play a central
+role in our approach. The monadic structure is a mere diversion.
 
 Structure of Effects
 --------------------
@@ -264,7 +264,7 @@ When dealing with purely functional programs, continuations have no
 effects. In this case, one can let \var{Eff} remain abstract, or
 define it to be the empty type: $\var{Eff} = \bot$. This choice is also
 natural when interpreting the original linear logic of
-\citet{girard_linear_1987}.
+\citet{girard_linear_1987,laurent_etude_2002}.
 
 The pure logic treats effects purely abstractly, but interpretations
 may choose to impose a richer structure on them. Such interpretations
@@ -336,12 +336,12 @@ source means to select if some more is available (\var{Cons}) or not
 Producing a sink means to select whether one can accept more elements
 (\var{Cont}) or not (\var{Full}). In the former case, one must then be
 able to consume a source. The \var{Full} case is useful when the sink
-bails out early, for example when it encounters an exception.
+bails out early, for example when it runs out of space.
 
 Note that, in order to produce (or consume) the next element, the
 source (or sink) must handle the effects generated by the other side
 of the stream before proceeding. This means that each production is
-matched by a consumption, and \textit{vice versa}.
+matched by a consumption, and \textit{vice versa}; element-wise.
 
 Linearity
 ---------
@@ -356,8 +356,8 @@ or \var{Nil}).
 
 Linear types allow to capture such an invariant: all functions from our
 library treat sources and sinks linearly. We underline that
-even individual stream elements are linear, which allow us to
-record even effects in them.
+even individual elements are declared linear, which allow us to
+store even effects in them.
 
 Basics
 ------
@@ -372,14 +372,14 @@ produced by a source. The second argument is the effect to run if no
 data is produced, and the third is the effect to run given the data
 and the remaining source.
 
-< await :: Source a ⊸ Eff ⊸ (a -> Source a ⊸ Eff) ⊸ Eff
+< await :: Source a ⊸ Eff ⊸ (a ⊸ Source a ⊸ Eff) ⊸ Eff
 < await Nil          eof  _ = eof
 < await (Cons x cs)  _    k = cs $ Cont $ \xs -> k x xs
 
-However, the above function breaks linearity (`eof` and `k` are not
+However, the above function breaks linearity (\var{eof} and \var{k} are not
 always used), so we cannot define it as such. Instead we have to
-arrange the types so that `await` can choose *itself* between the `eof`
-continuation and `k`. To do so, we must provide them as a so-called
+arrange the types so that \var{await} can choose *itself* between the \var{eof}
+continuation and \var{k}. To do so, we must provide them as a so-called
 additive conjunction. The additive conjunction is the dual of the
 \var{Either} type: there is a choice, but this choice falls on the
 consumer rather than the producer of the input. The additive conjunction,
@@ -392,7 +392,7 @@ the choice:
 (One will recognize the similarity between this definition and the
 De Morgan's laws.) Await can then be written as follows:
 
-> await :: Source a ⊸ (Eff & (a -> Source a ⊸ Eff)) ⊸ Eff
+> await :: Source a ⊸ (Eff & (a ⊸ Source a ⊸ Eff)) ⊸ Eff
 > await Nil r = r $ Left $ \eof -> eof
 > await (Cons x xs) r = r $ Right $ \c -> xs (Cont (c x))
 
@@ -422,7 +422,7 @@ introduce negated variants of source and sink types.
 These definitions have the added advantage to perfect the duality
 between sources and sinks, while not restricting the programs one can
 write. A benefit of the above definitions is that it becomes
-possible to forward data from \var{Src} to \var{Snk}:
+possible to forward data from \var{Src} to \var{Snk} without dropping elements:
 
 > fwd :: Src a ⊸ Snk a ⊸ Eff
 > fwd = shift
@@ -432,8 +432,8 @@ write the types of functions which manipulate `Source`s directly.
 
 > type Snk'  a = N (Source a)
 
-Functions over `Snk'` can be lifted manipulate `Src`, and in turn
-`Snk`. We show how to do this generically for endomorphisms:
+Functions over \var{Snk'} can be lifted manipulate \var{Src}, and in turn
+\var{Snk}. We can do so generically for endomorphisms:
 
 > flipSnk ::  (Snk' a  ⊸ Snk' b)  ->  Src b  ⊸ Src a
 > flipSrc  ::  (Src a  ⊸ Src b)  ->  Snk b  ⊸ Snk a
@@ -498,16 +498,17 @@ sources, as follows:
 > empty Full = mempty
 > empty (Cont k) = k Nil
 
-> cons :: a -> Src a ⊸ Src a
+> cons :: a ⊸ Src a ⊸ Src a
 > cons a s s' = yield a s' s
 
 (Taking the head or tail is not meaningful due to the linearity
-constraints: `await` must be used.)
+constraints: \var{await} must be used instead.)
 
 Another useful function is the equivalent of \var{take} on lists.
 Given a source, we can create a new source which ignores all but its
 first $n$ elements. Conversely, we can prune a sink to consume only
-the first $n$ elements of a source.
+the first $n$ elements of a source. We can even do it without breaking linearity,
+because all streams support early stopping.
 
 > takeSrc  :: Int -> Src  a ⊸ Src  a
 > takeSnk  :: Int -> Snk  a ⊸ Snk  a
@@ -539,7 +540,7 @@ Source form a (linear) monoid under concatenation:
 >   mappend = appendSnk
 >   mempty = shift Full
 
-We have already encountered the units (\var{empty} and \var{plug});
+We have already encountered \var{empty} above;
 the appending operations are defined below.  Intuitively,
 \var{appendSrc} first gives control to the first source until it runs
 out of elements and then turns control over to the second source. This
@@ -633,13 +634,13 @@ Zip two sinks, and the dual.
 
 Equivalent of \var{scanl'} for sources, and the dual
 
-> scanSrc :: (b -> a -> (b,c)) -> b -> Src a ⊸ Src c
-> scanSnk :: (b -> a -> (b,c)) -> b -> Snk c ⊸ Snk a
+> scanSrc :: (b -> a ⊸ (b,c)) -> b -> Src a ⊸ Src c
+> scanSnk :: (b -> a ⊸ (b,c)) -> b -> Snk c ⊸ Snk a
 
 Equivalent of \var{foldl'} for sources, and the dual.
 
-> foldSrc' :: (b -> a -> b) -> b -> Src a ⊸ NN b
-> foldSnk' :: (b -> a -> b) -> b -> N b ⊸ Snk a
+> foldSrc' :: (b -> a ⊸ b) -> b -> Src a ⊸ NN b
+> foldSnk' :: (b -> a ⊸ b) -> b -> N b ⊸ Snk a
 
 Drop some elements from a source, and the dual.
 
