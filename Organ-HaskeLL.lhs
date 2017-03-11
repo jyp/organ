@@ -60,8 +60,8 @@ functional programming languages resides in the composition mechanisms
 that they provide. That is, simple components can be built and
 understood in isolation; one does not need to worry about interference
 effects when composing them. In particular, lazy evaluation affords to
-construct complex programs by pipelining simple list transformation
-functions. Indeed, while strict evaluation forces to fully reify each
+construct complex programs by pipelining simple transformation
+functions. Indeed, whereas strict evaluation forces to fully reify each
 intermediate result between each computational step, lazy
 evaluation allows to run all the computations concurrently, often
 without ever allocating more than a single intermediate element at a time.
@@ -114,7 +114,7 @@ file. One may argue that \var{hClose} should not be called in the
 first place --- but then, closing the handle happens only when the
 \var{contents} list can be garbage collected (in full), and relying on
 garbage collection for cleaning resources is brittle; furthermore
-this effect compounds badly with the first issue discussed above (unpredicatbility of buffering).  If
+this effect compounds badly with the first issue discussed above (unpredictability of buffering).  If
 one wants to use lazy effectful computations, again, the
 compositionality principle is lost.
 
@@ -1346,12 +1346,12 @@ a type for continuations similar to \var{N}. However, a channel is
 just one type and does not exhibit the duality that our sources and
 sinks provide. Their library do feature a notion of sources and sinks
 but they are not the main abstraction. They are simply aids for
-prodiving and consuming data from transducers,
+providing and consuming data from transducers,
 respectively. Transducers are "affine"; they can be used at most
 once. The reason linearity is not required is that none of the
 transducers are effectful, the library only provides pure
 transducers. Therefore it is also not concerned with releasing
-resources in a timely fasion.
+resources in a timely fashion.
 
 Iteratees
 ---------
@@ -1500,7 +1500,7 @@ extend functional languages with linear types (see for example
 \cite[Ch. 9]{tov_linear_2012} for a survey). The present article
 explores how to program in practice using the extension proposed by
 the first author \cite{bernardy_retrofitting_2017}.  An earlier version
-used a very limitied form of linearity.
+used a very limited form of linearity.
 
 Conclusion
 ==========
@@ -1812,6 +1812,9 @@ The \var{Cons} case uses mutual induction:
 --  LocalWords:  pipelining demultiplexed nnIntro nnElim QSem newQSem
 --  LocalWords:  ankner edsl axelsson toListSnk waitQSem signalQSem
 --  LocalWords:  maccagnoni formulae smallcaps mellis mazurak CIH zz
---  LocalWords:  boundedChanBuffer danielsson
+--  LocalWords:  boundedChanBuffer danielsson FlexibleContexts Hask
 
 -->
+--  LocalWords:  LambdaCase bernardy citep xs endomorphisms fmap dup
+--  LocalWords:  observationally mutiplexing affine zipSource ys
+--  LocalWords:  forkSource
