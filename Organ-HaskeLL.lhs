@@ -681,9 +681,9 @@ Turn a source of chunks of data into a single source; and the dual.
 App: Stream-Based Parsing
 -------------------------
 
-To finish with effect-free functions, we give an example of a complex
-stream processor, which turns source of unstructured data into a
-source of structured data, given a parser.  This conversion is useful
+To finish with effect-free functions, we give an example of a
+stream processor which applies a parser to a source of symbols and returns
+a source of parse results.  This conversion is useful
 for example to turn an XML file, provided as a stream of characters
 into a stream of (opening and closing) tags.
 
@@ -824,10 +824,9 @@ connect it to one which stops receiving input after three lines.
 >                   (takeSnk 3 $ fileSnk "text.txt")
 
 Indeed, testing the above program reveals that it properly closes
-\var{stdin} after reading three lines. It is this early closing of sinks
-which allows modular stream programming. In particular, it is easy to
-support proper finalization in the presence of exceptions, as the next
-section shows.
+\var{stdin} after reading three lines. This early closing is
+critical to modular stream programming: it allows proper finaliztion
+of one end when an exception occurs at the other end.
 
 Exception Handling
 ------------------
@@ -861,9 +860,9 @@ continuation \var{c}.
 Thus, dealing with exceptions is done once and for all when implementing the
 library of streams. The programmer using the library does not have to
 be concerned with exceptions as they are caught and communicated
-properly under the hood, even if one would probably have a field in
-both the \var{Nil} and \var{Full} constructors indicating the nature
-of the exception encountered, if any, but we leave it out in the proof
+properly under the hood, even if one would probably have a component of
+the \var{Eff} type indicating the nature
+of the exception encountered, if any. Yet we leave it out in the proof
 of concept implementation presented in this paper.
 
 Using exception handlers, as in the above snippet, will secure the
@@ -893,7 +892,7 @@ to a sink: every production must be matched by a consumption (and vice
 versa).  In sum, synchronicity restricts the kind of operations one
 can construct, in exchange for two guarantees:
 
-1. Execution of connected sources and sinks is synchronous
+1. The effects of connected sources and sinks are run synchronously
 2. No implicit memory allocation happens
 
 While the guarantees have been discussed so far, it may be unclear how
@@ -919,7 +918,7 @@ of a source, by connecting it to two sinks (and the dual operation of mutiplexin
 
 The key ingredient is that demultiplexing starts by reading the next
 value available on the source. Depending on its value, we feed the
-data to either of the sinks are proceed. Besides, as soon as any of
+data to either of the sinks and proceed. Besides, as soon as any of
 the three parties closes the stream, the other two are notified.
 
 However, multiplexing sources cannot be implemented while respecting
@@ -930,7 +929,7 @@ type signature:
 < mux sa sb = ?
 
 We can try to fill the hole by reading on a source. However, if we do
-this, the choice falls to the multiplexer to choose which source to
+this, it falls onto the multiplexer to choose which source to
 run first. We may pick \var{sa}, however it may be blocking, while
 \var{sb} is ready with data. This is not really multiplexing, at best
 this approach would give us interleaving of data sources, by taking
@@ -938,7 +937,7 @@ turns.
 
 In order to make any progress, we can let the choice of which source
 to pick fall on the consumer of the stream. The type that we need for
-output data in this the additive conjunction. 
+output data in this situation is the additive conjunction. 
 We can then amend the type of multiplexing:
 
 > mux :: Src a ⊸ Src b ⊸ Src (a & b)
@@ -967,8 +966,8 @@ Co-Sources, Co-Sinks
 --------------------
 
 We call the structure that we are looking for a
-*co-source*. Co-sources are the subject of this section.  Remembering
-that producing $N a$ is equivalent to consuming $a$, thus a sink of $N
+*co-source*. Co-sources are the subject of this section.  We remember
+that producing $N a$ is equivalent to consuming $a$, thus that a sink of $N
 a$ is a (different kind of) source of $a$. We define:
 
 > type CoSrc a = Snk (N a)
@@ -1019,15 +1018,13 @@ example shows how to provide a file as a co-source:
 >           (coFileSrc h) xs  -- (2)
 
 
-Compared to \var{fileSrc}, the difference are that this function 1.
-  decides when to close the file (an error will happen if the file is to small)
-and 2.
+Compared to \var{fileSrc}, the difference are that this function
 decides the ordering of effects ran in a co-sink connected to it. That is,
 even though there is no data dependency between the lines (1) and (2), they are
 run in a specific, given order.
 We will see in the next section how this situation generalizes.
 
-The second example is a infinite co-sink that sends data to a file.
+The second example is an infinite co-sink that sends data to a file.
 
 > coFileSink :: Handle -> CoSnk String
 > coFileSink h Full = hClose h
@@ -1041,7 +1038,7 @@ co-source which eventually connects to the co-sink. Thus, the
 order of writing lines in the file depends on the order of effects chosen
 in the co-source connected to this co-sink.
 
-In sum, shifting from streams to co-streams shift the control flow
+In sum, shifting from streams to co-streams shifts the control flow
 responsibility from the sink to the (co-)source. It should be stressed
 that, in the programs which use the functions defined so far (even
 those that use \var{IO}), synchronicity is preserved: no data is buffered
@@ -1055,13 +1052,13 @@ restricts the kind of programs one can write. In this section, we
 provide primitives which allow controlled asynchronous programming within
 our framework.
 The main benefit of sticking to our framework in this case is that
-asynchronous behavior is cornered to the explicit usages of these
+asynchronous behavior is circumscribed to the explicit usages of these
 primitives. That is, the benefits of synchronous programming still
 hold locally.
 
 \paragraph{Scheduling} Asynchronicity arises either from an excess or
 a deficit of control. Let us first examine the latter case, which
-involves two streams which do not control the flow of execution. This
+involves two streams that do not control the flow of execution. This
 means that effects must be scheduled explicitly and externally to the
 streams.  This situation arises for example converting a \var{Src} to
 a \var{CoSrc}, as we have seen in the example above, when writing the
@@ -1084,7 +1081,7 @@ Implementing the conversions is then straightforward:
 > coSnkToSnk strat s0 s = s $ Cont (flip strat s0)
 
 What are possible scheduling strategies? The simplest, and most
-natural one is sequential execution: looping through both sources and
+natural one is sequential execution. Namly, looping through both sources and
 match the consumptions/productions element-wise, as follows.
 
 > sequentially :: Drop a => Schedule a
@@ -1096,14 +1093,14 @@ match the consumptions/productions element-wise, as follows.
 >   Nil -> drop x (xs Full)
 
 For most streams, sequential execution is the only sensible schedule:
-indeed, the sources and sinks expect their effects to be run in the
+indeed, sources and sinks often expect their effects to be run in the
 order prescribed by the stream. Swapping the arguments to `<>` in the
 above means that \var{Full} effects will be run first, spelling
 disaster.
 
 However, in certain cases running effects out of order may make
 sense. If the monoid of effects is commutative (or if the programmer
-is confident that execution order does not matter), one can shuffle
+is confident that execution order does not matter) one can shuffle
 the order of execution of effects. This re-ordering can be taken
 advantage of to run effects concurrently, as follows:
 
@@ -1146,13 +1143,12 @@ allocate and the dynamic behaviours of the streams.  In fact, our
 simple file-buffer above is likely to fail if the intermediate file is
 a regular file. Indeed, the reader may for example be faster than the
 writer and reach an end of file prematurely. One can use instead a
-UNIX pipe, but then one then faces the issue that pipes are of
-fixed maximum size, and if the writer overshoots the capacity of the
-pipe, a deadlock will occur.
+UNIX pipe, but then one then faces the issue that pipes are of fixed
+maximum size: if the writer outputs data in too large chunks, a
+deadlock will occur.
 
-If one is prepared to use more memory, one may use Concurrent Haskell
-channels as a buffering means, as they are bounded only by the size of
-the memory.
+If one is prepared to use unbounded memory, one may use Concurrent Haskell
+channels as a buffering means:
 
 > chanCoSnk :: Chan a -> CoSnk a
 > chanCoSnk _ Full = return ()
@@ -1171,8 +1167,8 @@ the memory.
 >   chanSrc c g
 
 
-Note that it is easy to create a bounded buffer, by guarding the
-writes with a semaphore. 
+Note that it is easy to create a bounded channel-based buffer, by
+guarding the writes with a semaphore.
 
 > chanCoSnk' :: Chan a -> QSem -> CoSnk a
 > chanCoSnk' _ _ Full = return ()
@@ -1211,8 +1207,8 @@ serve as buffer:
 >                         c (Cons x $ varSrc h)
 
 > varBuffer :: a -> CoSrc a ⊸ Src a
-> varBuffer a f g = do
->   c <- newIORef a
+> varBuffer initialValue f g = do
+>   c <- newIORef initialValue
 >   forkIO $ f (varCoSnk c)
 >   varSrc c g
 
@@ -1253,7 +1249,7 @@ must.
 App: idealized echo server
 ---------------------
 
-We finish exposition of asynchronous behavior with a small program
+We finish the exposition of asynchronous behavior with a small program
 sketching the skeleton of a client-server application. This is a small
 server with two clients, which echoes the requests of each client to
 both of them.
@@ -1330,11 +1326,12 @@ case of streams, this idea dates back at least to
 summary of Jacksons' insight).
 
 Our contribution is to bring this idea to stream programming in
-Haskell. (While duality was used for Haskell array programming, it has
-not been taken advantage for stream programming.) We believe that our
-implementation brings together the practical applications that Jackson
-intended, while being faithful to the theoretical foundations in
-logic, via the double-negation embedding.
+Hask-LL. (While duality was used for Haskell array programming, it has
+not been taken advantage for stream programming, and there was no
+emphasis on linearity.) We believe that our implementation brings
+together the practical applications that Jackson intended, while being
+faithful to the theoretical foundations in logic, via the
+double-negation embedding.
 
 Transducers
 -----------
@@ -1495,19 +1492,11 @@ applied to other lazily-evaluated data structures, such as the game
 trees discussed by \citet{hughes_functional_1989}: as far as we know
 this remains to be investigated.
 
-Another line of development is to implement language support for
-linearity, directly in Haskell. There has been many proposals to
-extend functional languages with linear types (see for example
-\cite[Ch. 9]{tov_linear_2012} for a survey). The present article
-explores how to program in practice using the extension proposed by
-the first author \cite{bernardy_retrofitting_2017}.  An earlier version
-used a very limited form of linearity.
-
 Conclusion
 ==========
 
 We have cast a new light on the current state of coroutine-based
-computation in Haskell, which we have done so by drawing inspiration
+computation in Haskell, which we have done by drawing inspiration
 from classical linear logic. We have further shown that the concepts
 of duality and polarity provide design principles to structure
 continuation-based code. In particular, we have shown that mismatches
