@@ -825,7 +825,7 @@ connect it to one which stops receiving input after three lines.
 
 Indeed, testing the above program reveals that it properly closes
 \var{stdin} after reading three lines. This early closing is
-critical to modular stream programming: it allows proper finaliztion
+critical to modular stream programming: it allows proper finalization
 of one end when an exception occurs at the other end.
 
 Exception Handling
@@ -1081,7 +1081,7 @@ Implementing the conversions is then straightforward:
 > coSnkToSnk strat s0 s = s $ Cont (flip strat s0)
 
 What are possible scheduling strategies? The simplest, and most
-natural one is sequential execution. Namly, looping through both sources and
+natural one is sequential execution. Namely, looping through both sources and
 match the consumptions/productions element-wise, as follows.
 
 > sequentially :: Drop a => Schedule a
@@ -1807,4 +1807,4 @@ The \var{Cons} case uses mutual induction:
 -->
 --  LocalWords:  LambdaCase bernardy citep xs endomorphisms fmap dup
 --  LocalWords:  observationally mutiplexing affine zipSource ys
---  LocalWords:  forkSource
+--  LocalWords:  forkSource initialValue
