@@ -775,9 +775,10 @@ A file sink is then simply:
 >   h <- openFile file WriteMode
 >   hFileSnk h s
 
-And the sink for standard output is:
+And the sink for standard output is (the 1 indicates that there is
+a single instance of this resource):
 
-> stdoutSnk :: Snk String
+> stdoutSnk ::1 Snk String
 > stdoutSnk = hFileSnk stdout
 
 (For ease of experimenting with our functions, the data items are
@@ -1803,8 +1804,8 @@ The \var{Cons} case uses mutual induction:
 --  LocalWords:  ankner edsl axelsson toListSnk waitQSem signalQSem
 --  LocalWords:  maccagnoni formulae smallcaps mellis mazurak CIH zz
 --  LocalWords:  boundedChanBuffer danielsson FlexibleContexts Hask
-
--->
 --  LocalWords:  LambdaCase bernardy citep xs endomorphisms fmap dup
 --  LocalWords:  observationally mutiplexing affine zipSource ys
 --  LocalWords:  forkSource initialValue
+
+-->
