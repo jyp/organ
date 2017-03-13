@@ -312,7 +312,7 @@ following type:
 
 We will make sure that \var{Snk} is the negation of a source (and vice
 versa), and thus the type of the above program may equivalently be
-be given the following type:
+given the following type:
 
 < simple :: Src a ⊸ Src a
 
@@ -530,7 +530,7 @@ structure of \var{Eff} in this case.
 Algebraic structure
 -------------------
 
-Source form a (linear) monoid under concatenation:
+Streams form (linear) monoids under concatenation:
 
 > instance Monoid (Src a) where
 >   mappend = appendSrc
@@ -815,7 +815,7 @@ current line must first be consumed in the sink (in this case by
 writing it to disk).  The stream behaves fully synchronously, and no
 intermediate data is buffered.
 
-Whenever a sink is full, the source connected to it should be finalized.
+Whenever a sink is full, the source connected to it will be finalized.
 The next example shows what happens when a sink closes the stream
 early. Instead of connecting the source to a bottomless sink, we
 connect it to one which stops receiving input after three lines.
@@ -1239,7 +1239,7 @@ order, potentially concurrently.
 
 3. Two push streams. In this case the streams must run in independent
 threads, and the programmer needs to make a choice for the communication
-buffer. One needs to be careful: if the buffer is to small a deadlock
+buffer. One needs to be careful: if the buffer is too small a deadlock
 may occur.
 
 Therefore, when programming with streams, one should consume push
