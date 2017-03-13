@@ -1264,7 +1264,7 @@ messages to the server, and a source for receiving them.  On the
 server side, types are dualized and thus, a client is represented by a
 pair of a co-source and a sink:
 
-> type Client a = (CoSrc a ⊗ Snk a)
+> type Client a = (CoSrc a, Snk a)
 
 For simplicity we implement a chat server handling exactly two
 clients.
