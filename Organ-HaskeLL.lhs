@@ -435,11 +435,14 @@ write the types of functions which manipulate `Source`s directly.
 Functions over \var{Snk'} can be lifted manipulate \var{Src}, and in turn
 \var{Snk}. We can do so generically for endomorphisms:
 
-> flipSnk ::  (Snk' a  ⊸ Snk' b)  ->  Src b  ⊸ Src a
-> flipSrc  ::  (Src a  ⊸ Src b)  ->  Snk b  ⊸ Snk a
-> flipSnk _ s Full = s Full
+> flipSnk ::  (Snk' a  ⊸ Snk' b)  ⊸  Src b  ⊸ Src a
+> flipSrc  ::  (Src a  ⊸ Src b)  ⊸  Snk b  ⊸ Snk a
+> flipSnk f s Full = s Full <> f full' Nil
 > flipSnk f s (Cont k) = s $ Cont $ (f k)
 > flipSrc f snk src = snk (f src)
+> full' :: Snk' a
+> full' (Cons _ xs) = xs Full
+> full' Nil = mempty
 
 As a particular case, consider the mapping functions:
 
@@ -498,7 +501,7 @@ sources, as follows:
 > empty Full = mempty
 > empty (Cont k) = k Nil
 
-> cons :: a ⊸ Src a ⊸ Src a
+> cons :: a -> Src a ⊸ Src a
 > cons a s s' = yield a s' s
 
 (Taking the head or tail is not meaningful due to the linearity
@@ -564,9 +567,9 @@ Sinks can be appended is a similar fashion.
 >   = s1 (Cons a (forwardThenSrc s2 s))
 
 > forwardThenSrc :: Snk' a ⊸ Src a ⊸ Src a
-> forwardThenSrc s2 = flipSnk (appendSnk' s2)
+> forwardThenSrc s2 src = flipSnk (appendSnk' s2) src
 
-> appendSnk ::  Snk a -> Snk a -> Snk a
+> appendSnk ::  Snk a ⊸ Snk a ⊸ Snk a
 > appendSnk t1 t2 s = t1 $ \case
 >   Full -> t2 empty <> s Full
 >   Cont k -> flipSrc (forwardThenSrc k) t2 s
@@ -778,7 +781,8 @@ A file sink is then simply:
 And the sink for standard output is (the 1 indicates that there is
 a single instance of this resource):
 
-> stdoutSnk ::1 Snk String
+< stdoutSnk ::1 Snk String
+
 > stdoutSnk = hFileSnk stdout
 
 (For ease of experimenting with our functions, the data items are
