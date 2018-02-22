@@ -435,14 +435,12 @@ write the types of functions which manipulate `Source`s directly.
 Functions over \var{Snk'} can be lifted manipulate \var{Src}, and in turn
 \var{Snk}. We can do so generically for endomorphisms:
 
-> flipSnk ::  (Snk' a  ⊸ Snk' b)  ⊸  Src b  ⊸ Src a
+> flipSnk ::  (Snk' a  ⊸ Snk' b)  ->  Src b  ⊸ Src a
 > flipSrc  ::  (Src a  ⊸ Src b)  ⊸  Snk b  ⊸ Snk a
-> flipSnk f s Full = s Full <> f full' Nil
+
+> flipSnk _ s Full = s Full
 > flipSnk f s (Cont k) = s $ Cont $ (f k)
 > flipSrc f snk src = snk (f src)
-> full' :: Snk' a
-> full' (Cons _ xs) = xs Full
-> full' Nil = mempty
 
 As a particular case, consider the mapping functions:
 
@@ -561,18 +559,17 @@ behavior is implemented in the helper function \var{forwardThenSnk}.
 
 Sinks can be appended is a similar fashion.
 
-> appendSnk' :: Snk' a ⊸ Snk' a ⊸ Snk' a
-> appendSnk' s1 s2 Nil = s1 Nil <> s2 Nil
-> appendSnk' s1 s2 (Cons a s)
->   = s1 (Cons a (forwardThenSrc s2 s))
-
-> forwardThenSrc :: Snk' a ⊸ Src a ⊸ Src a
-> forwardThenSrc s2 src = flipSnk (appendSnk' s2) src
-
+> forwardThenSrc :: Snk a ⊸ Src a ⊸ Src a
+> forwardThenSrc t2 src Full = t2 src
+> forwardThenSrc t2 src (Cont t1) = src $ Cont $ t12
+>   where t12 = appendSnk' t1 t2
+>
+> appendSnk' :: Snk' a ⊸ Snk a ⊸ Snk' a
+> appendSnk' t1 t2 Nil = t1 Nil <> t2 empty
+> appendSnk' t1 t2 (Cons a s) = t1 (Cons a (forwardThenSrc t2 s))
+>
 > appendSnk ::  Snk a ⊸ Snk a ⊸ Snk a
-> appendSnk t1 t2 s = t1 $ \case
->   Full -> t2 empty <> s Full
->   Cont k -> flipSrc (forwardThenSrc k) t2 s
+> appendSnk t1 t2 s = t1 (forwardThenSrc t2 s)
 
 The operations \var{forwardThenSnk} and \var{forwardThenSrc} are akin
 to taking the difference between a source and a sink. Thus we find it
@@ -581,7 +578,7 @@ convenient to give them the following aliases:
 > (-?) :: Snk' a ⊸ Src a ⊸ Snk' a
 > t -? s = forwardThenSnk' t s
 
-> (-!) :: Snk' a ⊸ Src a ⊸ Src a
+> (-!) :: Snk a ⊸ Src a ⊸ Src a
 > t -! s = forwardThenSrc t s
 
 > infixr -!
