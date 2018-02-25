@@ -23,6 +23,8 @@ author:
 > type a ⊗ b = (a,b)
 > infixr ⊸
 
+> data Bang a = Bang a
+
 
 > data Source  a  where
 >   Nil :: Source a
@@ -634,13 +636,14 @@ Zip two sinks, and the dual.
 
 Equivalent of \var{scanl'} for sources, and the dual
 
-> scanSrc :: (b -> a ⊸ (b,c)) -> b -> Src a ⊸ Src c
-> scanSnk :: (b -> a ⊸ (b,c)) -> b -> Snk c ⊸ Snk a
+
+> scanSrc :: (b -> a ⊸ (Bang b,c)) -> b -> Src a ⊸ Src c
+> scanSnk :: (b -> a ⊸ (Bang b,c)) -> b -> Snk c ⊸ Snk a
 
 Equivalent of \var{foldl'} for sources, and the dual.
 
-> foldSrc' :: (b -> a ⊸ b) -> b -> Src a ⊸ NN b
-> foldSnk' :: (b -> a ⊸ b) -> b -> N b ⊸ Snk a
+> foldSrc' :: (b -> a ⊸ Bang b) -> b -> Src a ⊸ NN b
+> foldSnk' :: (b -> a ⊸ Bang b) -> b -> N b ⊸ Snk a
 
 Drop some elements from a source, and the dual.
 
@@ -669,8 +672,8 @@ the second argument sink.
 
 Filter a source, and the dual.
 
-> filterSrc :: (a ⊸ Maybe b) ⊸ Src a ⊸ Src b
-> filterSnk :: (a ⊸ Maybe b) ⊸ Snk b ⊸ Snk a
+> filterSrc :: (a ⊸ Maybe b) -> Src a ⊸ Src b
+> filterSnk :: (a ⊸ Maybe b) -> Snk b ⊸ Snk a
 
 Turn a source of chunks of data into a single source; and the dual.
 
@@ -734,7 +737,7 @@ traversal of the source. In particular, whenever a result is
 encountered, it is fed to the sink. If the parser fails, both ends of
 the stream are closed.
 
-> parse :: forall s a. Parser s a -> Src s ⊸ Src a
+> parse :: forall s a. Parser s a -> Src (Bang s) ⊸ Src a
 > parse _ src Full = src Full
 > parse q@(P p0) src (Cont k) = scan (p0 $ \x -> Result x) k src
 >  where
@@ -742,8 +745,9 @@ the stream are closed.
 >  scan (Result res  )  ret        xs     = ret (Cons res (parse q xs))
 >  scan Fail            ret        xs     = ret Nil <> xs Full
 >  scan (Sym f)         mres       xs     = xs $ Cont $ \case
->    Nil        -> scan (f Nothing) mres empty
->    Cons x cs  -> scan (f $ Just x) mres cs
+>    Nil               -> scan (f Nothing) mres empty
+>    Cons (Bang x) cs  -> scan (f $ Just x) mres cs
+
 
 
 
@@ -1293,7 +1297,7 @@ sent to a sink to its two argument sinks.
 >      t2  (Cons z $ tee' dup xs c1))
 >   where (y,z) = dup x
 
-> tee' :: (a ⊸ (b, c)) -> Src a -> Sink b -> Src c
+> tee' :: (a ⊸ (b, c)) -> Src a ⊸ Sink b ⊸ Src c
 > tee' deal s1 t1 Full = s1 Full <> empty t1
 > tee' deal s1 Full t2 = s1 Full <> empty t2
 > tee' deal s1 (Cont t1) (Cont t2) = s1 $ Cont $ collapseSnk' deal t1 t2
@@ -1578,7 +1582,7 @@ Table of Functions: implementations
 > scanSnk' _ _ snk Nil          = snk Nil
 > scanSnk' f z snk (Cons a s)   = snk $  Cons y $
 >                                       scanSrc f next s
->   where (next,y) = f z a
+>   where (Bang next,y) = f z a
 
 > scanSnk f z = flipSrc (scanSrc f z)
 
@@ -1587,7 +1591,8 @@ Table of Functions: implementations
 > foldSnk' f z nb src = foldSrc' f z src nb
 
 > foldSnk'' _ z nb Nil = nb z
-> foldSnk'' f z nb (Cons a s) = foldSrc' f (f z a) s nb
+> foldSnk'' f z nb (Cons a s) = foldSrc' f b s nb
+>   where Bang b = f z a
 
 > dropSrc i = flipSnk (dropSnk' i)
 > dropSnk' 0 s s' = s s'
@@ -1613,7 +1618,7 @@ Table of Functions: implementations
 
 > unlinesSnk'' = unlinesSnk' []
 
-> unlinesSnk' :: String -> Snk' String -> Snk' Char
+> unlinesSnk' :: String -> Snk' String ⊸ Snk' Char
 > unlinesSnk' acc s Nil = s (Cons acc empty)
 > unlinesSnk' acc s (Cons '\n' s') = s (Cons   (reverse acc)
 >                                              (linesSrc s'))
@@ -1648,7 +1653,7 @@ Table of Functions: implementations
 > toList s k = s (Cont $ toListSnk' k)
 
 
-> toListSnk' :: N [a] -> Snk' a
+> toListSnk' :: N [a] ⊸ Snk' a
 > toListSnk' k Nil = k []
 > toListSnk' k (Cons x xs) = toList xs $ \xs' -> k (x:xs')
 
@@ -1810,3 +1815,4 @@ The \var{Cons} case uses mutual induction:
 --  LocalWords:  forkSource initialValue
 
 -->
+
