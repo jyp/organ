@@ -1526,7 +1526,8 @@ could be used safely, without the quirks of lazy IO.
 
 \begin{acks}
 We gratefully thank Koen Claessen, Atze van der Ploeg and Nicolas
-Pouillard for feedback on drafts of this paper.  The source code for
+Pouillard for feedback on drafts of this paper.
+Alex Gryzlov discovered helped fixing linearity errors.  The source code for
 this paper is a literate Haskell file, whose latest version is
 available at this url:
 https://github.com/jyp/organ/blob/master/Organ-HaskeLL.lhs
